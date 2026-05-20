@@ -1,0 +1,74 @@
+{
+  "items": [
+    {
+      "external_reference": "pilot-xpression-ultra-braid-stretched-2026-03-17",
+      "brand": "X-Pression",
+      "category": "Hair",
+      "subcategory": "Hair Extensions",
+      "product_family_name": "Ultra Braid Stretched",
+      "description": "Pilot batch item for the first real hair family.",
+      "confidence": 0.92,
+      "notes": "Batch import sample.",
+      "source_candidates": [
+        {
+          "role": "primary",
+          "source_type": "official_brand",
+          "trust_status": "verified",
+          "url": "https://example.com/x-pression/ultra-braid-stretched",
+          "title": "Ultra Braid Stretched"
+        }
+      ],
+      "variants": [
+        {
+          "variant_display_name": "20 inch / Color 1",
+          "color_code": "1",
+          "color_name": "Jet Black",
+          "length": "20 inch",
+          "texture": "Straight",
+          "attributes_json": {
+            "fiber": "synthetic"
+          }
+        }
+      ]
+    },
+    {
+      "external_reference": "pilot-nivea-cocoa-butter-body-lotion-2026-03-17",
+      "brand": "Nivea",
+      "category": "Body Care",
+      "subcategory": "Body Lotion",
+      "product_family_name": "Cocoa Butter Body Lotion",
+      "description": "Pilot batch item for second-category body care testing.",
+      "confidence": 0.89,
+      "notes": "Second-category export mapping sample.",
+      "source_candidates": [
+        {
+          "role": "primary",
+          "source_type": "official_brand",
+          "trust_status": "verified",
+          "url": "https://example.com/nivea/cocoa-butter-body-lotion",
+          "title": "Nivea Cocoa Butter Body Lotion"
+        }
+      ],
+      "variants": [
+        {
+          "variant_display_name": "400 ml",
+          "size": "400 ml",
+          "fragrance": "Cocoa Butter",
+          "attributes_json": {
+            "skin_type": "dry_skin",
+            "pack_format": "bottle"
+          }
+        },
+        {
+          "variant_display_name": "625 ml",
+          "size": "625 ml",
+          "fragrance": "Cocoa Butter",
+          "attributes_json": {
+            "skin_type": "dry_skin",
+            "pack_format": "pump"
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,102 @@
+{
+  "external_reference": "pilot-xpression-ultra-braid-stretched-2026-03-17",
+  "brand": "X-Pression",
+  "category": "Hair",
+  "subcategory": "Hair Extensions",
+  "product_family_name": "Ultra Braid Stretched",
+  "short_description": "Pre-stretched braiding hair family used as the first pilot family in catalogue staging.",
+  "description": "Draft family assembled from external AI research for review inside the catalogue staging notebook.",
+  "confidence": 0.92,
+  "notes": "Pilot import for end-to-end review testing.",
+  "source_candidates": [
+    {
+      "role": "primary",
+      "source_type": "official_brand",
+      "trust_status": "verified",
+      "url": "https://example.com/x-pression/ultra-braid-stretched",
+      "title": "X-Pression Ultra Braid Stretched",
+      "confidence": 0.93,
+      "notes": "Main reference used during pilot."
+    },
+    {
+      "role": "variant_reference",
+      "source_type": "trusted_retailer",
+      "trust_status": "pending_review",
+      "url": "https://example.com/retailer/x-pression-ultra-braid-stretched",
+      "title": "Retailer variant grid",
+      "confidence": 0.74,
+      "notes": "Useful for colour and length comparison."
+    }
+  ],
+  "image_urls": [
+    "https://example.com/images/xpression-ultra-braid-front.jpg"
+  ],
+  "product_types": [
+    {
+      "name": "Standard Pack",
+      "description": "Core sellable line in the pilot set.",
+      "notes": "Used to test optional type layer.",
+      "variants": [
+        {
+          "variant_display_name": "20 inch / Color 1",
+          "color_code": "1",
+          "color_name": "Jet Black",
+          "length": "20 inch",
+          "texture": "Straight",
+          "attributes_json": {
+            "fiber": "synthetic",
+            "finish_note": "stretched"
+          },
+          "shop_match": {
+            "shop_match_status": "confirmed_yes",
+            "confirmation_method": "shelf_photo",
+            "confidence": 0.91,
+            "notes": "Seen in pilot shelf photo."
+          }
+        },
+        {
+          "variant_display_name": "20 inch / Color 1B",
+          "color_code": "1B",
+          "color_name": "Off Black",
+          "length": "20 inch",
+          "texture": "Straight",
+          "attributes_json": {
+            "fiber": "synthetic",
+            "finish_note": "stretched"
+          },
+          "shop_match": {
+            "shop_match_status": "maybe",
+            "confirmation_method": "manual_assumption",
+            "confidence": 0.54,
+            "notes": "Needs confirmation during physical check."
+          }
+        }
+      ]
+    }
+  ],
+  "variants": [
+    {
+      "variant_display_name": "52 inch / Color T1B/27",
+      "color_code": "T1B/27",
+      "color_name": "Off Black to Honey Blonde",
+      "length": "52 inch",
+      "texture": "Straight",
+      "attributes_json": {
+        "collection": "ombre",
+        "fiber": "synthetic"
+      },
+      "shop_match": {
+        "shop_match_status": "confirmed_no",
+        "confirmation_method": "physical_check",
+        "confidence": 0.88,
+        "notes": "Not seen in current pilot stock."
+      }
+    }
+  ],
+  "shop_match": {
+    "shop_match_status": "confirmed_yes",
+    "confirmation_method": "manager_confirmation",
+    "confidence": 0.94,
+    "notes": "Family confirmed as carried in shop."
+  }
+}
