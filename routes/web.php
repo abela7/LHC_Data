@@ -37,6 +37,7 @@ use App\Http\Controllers\PictureOnlyProductController;
 use App\Http\Controllers\RealBrandProductController;
 use App\Http\Controllers\ReviewQueueController;
 use App\Http\Controllers\RetailProductController;
+use App\Http\Controllers\RetailProductExportController;
 use App\Http\Controllers\RetailProductMediaController;
 use App\Http\Controllers\ShopProductNormalizationController;
 use App\Http\Controllers\ShopProductIntakeController;
@@ -194,6 +195,7 @@ Route::get('/retail-products', [RetailProductController::class, 'index'])->name(
 Route::get('/retail-products/brands', [RetailProductController::class, 'brands'])->name('retail-products.brands');
 Route::get('/retail-products/brands/{brandKey}', [RetailProductController::class, 'showBrand'])->name('retail-products.brands.show');
 Route::get('/retail-products/families/{family}', [RetailProductController::class, 'showFamily'])->name('retail-products.families.show');
+Route::get('/retail-products/families/{family}/export', [RetailProductExportController::class, 'family'])->name('retail-products.families.export');
 Route::post('/retail-products/families/{family}/products', [RetailProductController::class, 'storeFamilyProduct'])->name('retail-products.families.products.store');
 Route::patch('/retail-products/families/{family}/shared-details', [RetailProductController::class, 'updateFamilySharedDetails'])->name('retail-products.families.shared-details.update');
 Route::patch('/retail-products/families/{family}/display-name', [RetailProductController::class, 'updateFamilyDisplayName'])->name('retail-products.families.display-name.update');

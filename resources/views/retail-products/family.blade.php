@@ -219,16 +219,28 @@
                                 </button>
                             </div>
                         </div>
-                        <button type="button"
-                                class="rfm-hero-preview-btn"
-                                data-rfm-ecom-preview-open
-                                aria-label="Preview how this family looks on the shop">
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                                <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/>
-                                <circle cx="12" cy="12" r="3"/>
-                            </svg>
-                            <span class="rfm-hero-preview-btn-label">Shop preview</span>
-                        </button>
+                        <div class="rfm-hero-actions">
+                            <button type="button"
+                                    class="rfm-hero-preview-btn"
+                                    data-rfm-ecom-preview-open
+                                    aria-label="Preview how this family looks on the shop">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                    <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/>
+                                    <circle cx="12" cy="12" r="3"/>
+                                </svg>
+                                <span class="rfm-hero-preview-btn-label">Shop preview</span>
+                            </button>
+                            <a href="{{ route('retail-products.families.export', $family) }}"
+                               class="rfm-hero-preview-btn rfm-hero-export-btn"
+                               aria-label="Export this product family with SKUs and images">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                    <path d="M7 10l5 5 5-5"/>
+                                    <path d="M12 15V3"/>
+                                </svg>
+                                <span class="rfm-hero-preview-btn-label">Export product</span>
+                            </a>
+                        </div>
                     </div>
                     <div class="rfm-tag-row">
                         <span class="rfm-tag rfm-tag-brand">{{ $family->brand_name }}</span>
