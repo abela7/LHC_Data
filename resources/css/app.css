@@ -10526,6 +10526,23 @@
         background: #e8f5ec;
     }
 
+    .rfm-vchip-delete {
+        @apply inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-sm font-black leading-none;
+        border-color: rgba(138, 42, 34, 0.22);
+        background: #fff7f5;
+        color: #8a2a22;
+    }
+
+    .rfm-vchip-delete:focus-visible,
+    .rfm-vchip-delete:hover {
+        border-color: #8a2a22;
+        outline: none;
+    }
+
+    .rfm-vchip-delete:disabled {
+        @apply cursor-wait opacity-50;
+    }
+
     .rfm-vchip.is-saving {
         opacity: 0.55;
         border-style: dashed;

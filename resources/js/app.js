@@ -4849,6 +4849,7 @@ const initVariantOptionCreateSkus = (root) => {
 const initVariantModelChips = (root, csrf, showToast) => {
     const bulkUrl = root.dataset.rfmVariantOptionsBulkUrl;
     const createNewSkusUrl = root.dataset.rfmCreateNewSkusUrl;
+    const destroyUrlTemplate = root.dataset.rfmVariantOptionsDestroyUrlTemplate;
     if (!bulkUrl) return;
 
     const createBar = root.querySelector('[data-rfm-variant-create-bar]');
@@ -4856,6 +4857,7 @@ const initVariantModelChips = (root, csrf, showToast) => {
     const createBtn = root.querySelector('[data-rfm-create-new-skus]');
 
     const normalizeChipLabel = (raw) => String(raw || '').replace(/\s+/g, ' ').trim();
+    const buildDestroyUrl = (optionId) => String(destroyUrlTemplate || '').replace(/\/0(?!\d)/, `/${optionId}`);
 
     const chipLabelsInField = (field) => Array.from(field.querySelectorAll('[data-rfm-vchip]'))
         .map((chip) => chip.dataset.chipLabel || chip.querySelector('.rfm-vchip-label')?.textContent || '')
@@ -4945,6 +4947,26 @@ const initVariantModelChips = (root, csrf, showToast) => {
         });
     };
 
+    const removeOptionEverywhere = (optionId) => {
+        root.querySelectorAll(`[data-rfm-vchip][data-option-id="${optionId}"]`).forEach((chip) => chip.remove());
+        root.querySelectorAll(`[data-rfm-manage-row][data-option-id="${optionId}"]`).forEach((row) => row.remove());
+        root.querySelectorAll(`[data-rfm-variant-select] option[value="${optionId}"]`).forEach((option) => {
+            const select = option.closest('select');
+            const wasSelected = select?.value === String(optionId);
+            option.remove();
+            if (wasSelected && select) {
+                select.value = '';
+                select.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+        });
+        root.querySelectorAll('[data-rfm-manage-empty]').forEach((empty) => {
+            const source = empty.closest('[data-rfm-manage-source]');
+            const list = source?.querySelector('[data-rfm-manage-list]');
+            if (list) empty.hidden = list.children.length > 0;
+        });
+        updateCreateBar();
+    };
+
     const buildPersistedChip = (option, sellable, isNew = true) => {
         const chip = document.createElement('span');
         const missing = Number(sellable?.missing) || 0;
@@ -4969,6 +4991,14 @@ const initVariantModelChips = (root, csrf, showToast) => {
             : 'Sellable SKU exists for this value';
         status.textContent = missing > 0 ? 'Pending' : 'Ready';
         chip.append(status);
+
+        const deleteBtn = document.createElement('button');
+        deleteBtn.type = 'button';
+        deleteBtn.className = 'rfm-vchip-delete';
+        deleteBtn.dataset.rfmVchipDelete = '';
+        deleteBtn.setAttribute('aria-label', `Remove ${option.label}`);
+        deleteBtn.innerHTML = '&times;';
+        chip.append(deleteBtn);
 
         return chip;
     };
@@ -5128,6 +5158,47 @@ const initVariantModelChips = (root, csrf, showToast) => {
         if (!input || event.key !== 'Enter') return;
         event.preventDefault();
         consumeChipInput(input, true);
+    });
+
+    root.addEventListener('click', async (event) => {
+        const btn = event.target.closest('[data-rfm-vchip-delete]');
+        if (!btn) return;
+        event.preventDefault();
+        event.stopPropagation();
+
+        const chip = btn.closest('[data-rfm-vchip]');
+        const optionId = chip?.dataset.optionId;
+        const label = chip?.dataset.chipLabel || chip?.querySelector('.rfm-vchip-label')?.textContent || 'this value';
+        if (!optionId || !destroyUrlTemplate) return;
+
+        if (!window.confirm(`Remove "${label}" from this variant group?`)) return;
+
+        btn.disabled = true;
+        chip.classList.add('is-saving');
+
+        const formData = new FormData();
+        formData.append('_token', csrf);
+        formData.append('_method', 'DELETE');
+
+        try {
+            const response = await fetch(buildDestroyUrl(optionId), {
+                method: 'POST',
+                body: formData,
+                headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                const firstError = Object.values(data.errors || {}).flat()[0];
+                throw new Error(firstError || data.message || 'Could not remove value.');
+            }
+
+            removeOptionEverywhere(optionId);
+            showToast(data.message || 'Variant value removed.');
+        } catch (err) {
+            chip.classList.remove('is-saving');
+            btn.disabled = false;
+            showToast(err.message || 'Could not remove value.', true);
+        }
     });
 
     root.addEventListener('rfm-variant-option-added', (event) => {

@@ -168,6 +168,7 @@
              data-rfm-root
              data-rfm-display-name-url="{{ route('retail-products.families.display-name.update', $family) }}"
              data-rfm-variant-options-bulk-url="{{ route('retail-products.families.variant-options.bulk-store', $family) }}"
+             data-rfm-variant-options-destroy-url-template="{{ route('retail-products.families.variant-options.destroy', [$family, 0]) }}"
              data-rfm-create-new-skus-url="{{ route('retail-products.families.variant-options.create-skus-for-new', $family) }}">
         <nav class="rfm-crumbs" aria-label="Breadcrumb">
             <a href="{{ route('brand-catalogue.index') }}">Catalogue</a>
@@ -478,6 +479,12 @@
                                                 @else
                                                     <span class="rfm-vchip-ready" title="Sellable SKU exists for this value">Ready</span>
                                                 @endif
+                                                <button type="button"
+                                                        class="rfm-vchip-delete"
+                                                        data-rfm-vchip-delete
+                                                        aria-label="Remove {{ $option->label }} from {{ $group->name }}">
+                                                    &times;
+                                                </button>
                                             </span>
                                         @endforeach
                                         <input type="text"
