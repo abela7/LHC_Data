@@ -182,83 +182,87 @@
         {{-- Compact sticky family hero --}}
         <header class="rfm-hero" data-rfm-hero>
             <div class="rfm-hero-main">
-                <div class="rfm-hero-thumb">
-                    @if ($primaryFamilyImage)
-                        <button type="button"
-                                class="rfm-thumb-lightbox-trigger"
-                                data-picture-preview-trigger
-                                data-image-url="{{ $primaryFamilyImage }}"
-                                data-picture-id="{{ $family->family_name }}"
-                                @if ($primaryFamilyMedia)
-                                    data-media-id="{{ $primaryFamilyMedia->id }}"
-                                    data-image-delete-url="{{ route('retail-products.media.destroy', $primaryFamilyMedia) }}"
-                                    data-image-replace-url="{{ route('retail-products.media.replace', $primaryFamilyMedia) }}"
-                                    data-image-role="{{ $primaryFamilyMedia->image_role }}"
-                                    data-image-usage="{{ $primaryFamilyMedia->usage_context }}"
-                                    data-image-source-label="{{ $primaryFamilyMedia->source_label }}"
-                                    data-image-notes="{{ $primaryFamilyMedia->notes }}"
-                                @endif
-                                aria-label="View family image full size">
-                            <img src="{{ $primaryFamilyImage }}" alt="" loading="eager">
-                        </button>
-                    @else
-                        <span aria-hidden="true">★</span>
-                    @endif
-                </div>
-                <div class="rfm-hero-text">
-                    <div class="rfm-hero-head">
-                        <div class="rfm-hero-title-copy">
-                            <p class="rfm-eyebrow">Family · {{ ucfirst($family->status) }}</p>
-                            <div class="rfm-hero-title-edit">
-                                <h1 data-rfm-display-name-heading>{{ $family->display_family_name }}</h1>
-                                <button type="button"
-                                        class="rfm-hero-title-edit-btn"
-                                        data-rfm-display-name-open
-                                        aria-label="{{ __('retail.family.display_name.edit') }}">
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                                        <path d="M12 20h9"/>
-                                        <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/>
-                                    </svg>
-                                </button>
-                            </div>
-                        </div>
-
-                        <div class="rfm-hero-actions">
+                <div class="rfm-hero-top">
+                    <div class="rfm-hero-thumb">
+                        @if ($primaryFamilyImage)
                             <button type="button"
-                                    class="rfm-hero-preview-btn"
-                                    data-rfm-ecom-preview-open
-                                    aria-label="Preview how this family looks on the shop">
-                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                                    <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/>
-                                    <circle cx="12" cy="12" r="3"/>
-                                </svg>
-                                <span class="rfm-hero-preview-btn-label">Shop preview</span>
+                                    class="rfm-thumb-lightbox-trigger"
+                                    data-picture-preview-trigger
+                                    data-image-url="{{ $primaryFamilyImage }}"
+                                    data-picture-id="{{ $family->family_name }}"
+                                    @if ($primaryFamilyMedia)
+                                        data-media-id="{{ $primaryFamilyMedia->id }}"
+                                        data-image-delete-url="{{ route('retail-products.media.destroy', $primaryFamilyMedia) }}"
+                                        data-image-replace-url="{{ route('retail-products.media.replace', $primaryFamilyMedia) }}"
+                                        data-image-role="{{ $primaryFamilyMedia->image_role }}"
+                                        data-image-usage="{{ $primaryFamilyMedia->usage_context }}"
+                                        data-image-source-label="{{ $primaryFamilyMedia->source_label }}"
+                                        data-image-notes="{{ $primaryFamilyMedia->notes }}"
+                                    @endif
+                                    aria-label="View family image full size">
+                                <img src="{{ $primaryFamilyImage }}" alt="" loading="eager">
                             </button>
-                            <a href="{{ route('retail-products.families.export', $family) }}"
-                               class="rfm-hero-preview-btn rfm-hero-export-btn"
-                               aria-label="Export this product family with SKUs and images">
-                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                                    <path d="M7 10l5 5 5-5"/>
-                                    <path d="M12 15V3"/>
-                                </svg>
-                                <span class="rfm-hero-preview-btn-label">Export product</span>
-                            </a>
-                        </div>
+                        @else
+                            <span aria-hidden="true">★</span>
+                        @endif
                     </div>
 
-                    <div class="rfm-tag-row">
-                        <span class="rfm-tag rfm-tag-brand">{{ $family->brand_name }}</span>
-                        @if ($family->line_name)
-                            <span class="rfm-tag">{{ $family->line_name }}</span>
-                        @endif
-                        @if ($family->root_catalogue_name)
-                            <span class="rfm-tag">{{ $family->root_catalogue_name }}</span>
-                        @endif
-                        @if ($family->product_type_name)
-                            <span class="rfm-tag">{{ $family->product_type_name }}</span>
-                        @endif
+                    <div class="rfm-hero-title-copy">
+                        <div class="rfm-hero-title-row">
+                            <p class="rfm-eyebrow">Family</p>
+                            <span class="rfm-hero-status">{{ ucfirst($family->status) }}</span>
+                        </div>
+                        <div class="rfm-hero-title-edit">
+                            <h1 data-rfm-display-name-heading>{{ $family->display_family_name }}</h1>
+                            <button type="button"
+                                    class="rfm-hero-title-edit-btn"
+                                    data-rfm-display-name-open
+                                    aria-label="{{ __('retail.family.display_name.edit') }}">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                    <path d="M12 20h9"/>
+                                    <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/>
+                                </svg>
+                            </button>
+                        </div>
+                        <p class="rfm-hero-meta">
+                            <span class="rfm-hero-status rfm-hero-status-inline">{{ ucfirst($family->status) }}</span>
+                            {{ $family->brand_name }}
+                            @if ($family->root_catalogue_name)
+                                · {{ $family->root_catalogue_name }}
+                            @endif
+                            @if ($family->product_type_name)
+                                · {{ $family->product_type_name }}
+                            @endif
+                        </p>
                     </div>
+
+                    <div class="rfm-hero-actions">
+                        <button type="button"
+                                class="rfm-hero-action-btn rfm-hero-action-btn--primary"
+                                data-rfm-ecom-preview-open
+                                aria-label="Preview how this family looks on the shop">
+                            <span class="rfm-hero-action-label-mobile">Preview</span>
+                            <span class="rfm-hero-action-label-desktop">Shop preview</span>
+                        </button>
+                        <a href="{{ route('retail-products.families.export', $family) }}"
+                           class="rfm-hero-action-btn"
+                           aria-label="Export this product family with SKUs and images">
+                            Export
+                        </a>
+                    </div>
+                </div>
+
+                <div class="rfm-tag-row rfm-hero-tags-desktop">
+                    <span class="rfm-tag rfm-tag-brand">{{ $family->brand_name }}</span>
+                    @if ($family->line_name)
+                        <span class="rfm-tag">{{ $family->line_name }}</span>
+                    @endif
+                    @if ($family->root_catalogue_name)
+                        <span class="rfm-tag">{{ $family->root_catalogue_name }}</span>
+                    @endif
+                    @if ($family->product_type_name)
+                        <span class="rfm-tag">{{ $family->product_type_name }}</span>
+                    @endif
                 </div>
             </div>
 
