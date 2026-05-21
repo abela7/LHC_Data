@@ -13410,7 +13410,24 @@
         }
 
         .rfm-quick-image-panel {
-            @apply max-h-[94vh] max-w-none rounded-b-none rounded-t-[24px];
+            @apply max-h-[94vh] max-w-none overflow-y-auto rounded-b-none rounded-t-[24px];
+            -webkit-overflow-scrolling: touch;
+        }
+
+        .rfm-quick-image-layout {
+            flex: none;
+            min-height: auto;
+        }
+
+        .rfm-quick-image-main {
+            flex: none;
+            overflow: visible;
+        }
+
+        .rfm-quick-image-media {
+            flex: none;
+            min-height: 0;
+            overflow: visible;
         }
     }
 
@@ -13814,7 +13831,7 @@
     }
 
     .rfm-quick-image-foot {
-        @apply sticky bottom-0 flex flex-col gap-2 border-t bg-[#fffaf3] px-0 pb-0 pt-2;
+        @apply flex flex-col gap-2 border-t bg-[#fffaf3] px-0 pb-3 pt-2;
         border-color: #e5dbc9;
     }
 
