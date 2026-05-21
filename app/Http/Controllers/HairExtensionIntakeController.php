@@ -568,7 +568,16 @@ class HairExtensionIntakeController extends Controller
         $showDraftsOnly = $request->boolean('drafts_only') || $request->boolean('include_drafts');
 
         $query = HairExtensionIntake::query()
-            ->with(['brand', 'productType', 'style', 'photos', 'aiSuggestions', 'store', 'section', 'subsection'])
+            ->with([
+                'brand.catalogue',
+                'productType.line.brand.catalogue',
+                'style.productType.line.brand.catalogue',
+                'photos',
+                'aiSuggestions',
+                'store',
+                'section',
+                'subsection',
+            ])
             ->where(function ($query): void {
                 $query
                     ->whereNotNull('brand_catalogue_brand_id')
@@ -612,7 +621,13 @@ class HairExtensionIntakeController extends Controller
             ->count();
 
         $recentIntakes = HairExtensionIntake::query()
-            ->with(['brand', 'productType', 'style', 'photos', 'aiSuggestions'])
+            ->with([
+                'brand.catalogue',
+                'productType.line.brand.catalogue',
+                'style.productType.line.brand.catalogue',
+                'photos',
+                'aiSuggestions',
+            ])
             ->where(function ($query): void {
                 $query
                     ->whereNotNull('brand_catalogue_brand_id')

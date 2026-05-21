@@ -501,6 +501,38 @@
                 .his-stats { grid-template-columns:1fr; }
             }
         </style>
+        @php
+            $catalogueWorkspaceLink = static function ($intake): ?array {
+                $style = $intake->style;
+                $productType = $style?->productType ?: $intake->productType;
+                $line = $productType?->line;
+                $brand = $line?->brand ?: $style?->brand ?: $intake->brand;
+                $catalogue = $brand?->catalogue;
+
+                if ($style && $productType && $line && $brand && $catalogue) {
+                    return [
+                        'url' => route('brand-catalogue.styles.show', [$catalogue, $brand, $line, $productType, $style]),
+                        'label' => 'Open family',
+                    ];
+                }
+
+                if ($productType && $line && $brand && $catalogue) {
+                    return [
+                        'url' => route('brand-catalogue.product-types.show', [$catalogue, $brand, $line, $productType]),
+                        'label' => 'Open type',
+                    ];
+                }
+
+                if ($brand && $catalogue) {
+                    return [
+                        'url' => route('brand-catalogue.brands.show', [$catalogue, $brand]),
+                        'label' => 'Open brand',
+                    ];
+                }
+
+                return null;
+            };
+        @endphp
 
         <header class="his-hero">
             <div class="his-hero-content">
@@ -563,8 +595,11 @@
                             $recentMainAxis = $firstGroup['name'] ?? 'Variant';
                             $recentMainValues = collect($firstGroup['values'] ?? [])->implode(', ');
                         }
+                        $recentWorkspaceLink = $intake->status === 'submitted' ? $catalogueWorkspaceLink($intake) : null;
+                        $recentPrimaryUrl = $recentWorkspaceLink['url'] ?? route('hair-extension-intake.v2', ['edit_intake' => $intake->id]);
+                        $recentPrimaryLabel = $recentWorkspaceLink['label'] ?? ($intake->status === 'submitted' ? 'View/Edit' : 'Open draft');
                     @endphp
-                    <article class="his-recent-card" style="cursor:pointer" data-intake-preview="{{ route('hair-extension-intake.draft', $intake) }}" data-intake-edit-url="{{ route('hair-extension-intake.v2', ['edit_intake' => $intake->id]) }}">
+                    <article class="his-recent-card" style="cursor:pointer" data-intake-preview="{{ route('hair-extension-intake.draft', $intake) }}" data-intake-edit-url="{{ $recentPrimaryUrl }}">
                         <div class="his-recent-header">
                             <span class="his-recent-status {{ $intake->status }}">
                                 @if($intake->status === 'draft')
@@ -614,8 +649,8 @@
                         </div>
 
                         <div class="his-recent-actions">
-                            <a class="his-btn primary" href="{{ route('hair-extension-intake.v2', ['edit_intake' => $intake->id]) }}">
-                                {{ $intake->status === 'submitted' ? 'View/Edit' : 'Open draft' }}
+                            <a class="his-btn primary" href="{{ $recentPrimaryUrl }}">
+                                {{ $recentPrimaryLabel }}
                             </a>
                             <a class="his-btn" href="{{ route('hair-extension-intake.v2', ['duplicate_intake' => $intake->id]) }}" title="Duplicate this intake as a new record">
                                 Duplicate
@@ -658,6 +693,9 @@
                             $productTypeStatus = $intake->product_type_status ?: ($intake->product_type_unknown ? 'not_known' : 'known');
                             $styleFamilyStatus = $intake->style_family_status ?: ($intake->style_unknown ? 'not_known' : 'known');
                             $locationPath = collect([$intake->store?->name, $intake->section?->name, $intake->subsection?->name])->filter();
+                            $workspaceLink = $intake->status === 'submitted' ? $catalogueWorkspaceLink($intake) : null;
+                            $primaryUrl = $workspaceLink['url'] ?? route('hair-extension-intake.v2', ['edit_intake' => $intake->id]);
+                            $primaryLabel = $workspaceLink['label'] ?? ($intake->status === 'draft' ? 'Open draft' : 'View/Edit');
                         @endphp
                         <article class="his-product">
                             <div class="his-product-main">
@@ -826,8 +864,8 @@
                             </div>
 
                             <div class="his-card-actions">
-                                <a class="his-btn primary" href="{{ route('hair-extension-intake.v2', ['edit_intake' => $intake->id]) }}">
-                                    {{ $intake->status === 'draft' ? 'Open draft' : 'View/Edit' }}
+                                <a class="his-btn primary" href="{{ $primaryUrl }}">
+                                    {{ $primaryLabel }}
                                 </a>
                                 <a class="his-btn" href="{{ route('hair-extension-intake.v2', ['duplicate_intake' => $intake->id]) }}" title="Duplicate this intake as a new record">
                                     Duplicate
