@@ -203,7 +203,7 @@
                     @endif
                 </div>
                 <div class="rfm-hero-text">
-                    <div class="rfm-hero-title-row">
+                    <div class="rfm-hero-head">
                         <div class="rfm-hero-title-copy">
                             <p class="rfm-eyebrow">Family · {{ ucfirst($family->status) }}</p>
                             <div class="rfm-hero-title-edit">
@@ -219,6 +219,7 @@
                                 </button>
                             </div>
                         </div>
+
                         <div class="rfm-hero-actions">
                             <button type="button"
                                     class="rfm-hero-preview-btn"
@@ -242,6 +243,7 @@
                             </a>
                         </div>
                     </div>
+
                     <div class="rfm-tag-row">
                         <span class="rfm-tag rfm-tag-brand">{{ $family->brand_name }}</span>
                         @if ($family->line_name)
