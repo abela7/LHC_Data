@@ -17525,14 +17525,23 @@
     }
 
     .de-topbar {
-        @apply sticky top-0 z-30 flex flex-wrap items-center gap-3 border-b px-3 py-3;
+        @apply sticky top-0 z-30 w-full min-w-0 border-b;
         border-color: var(--color-edge);
         background: rgba(255, 253, 248, 0.96);
         backdrop-filter: blur(10px);
     }
 
+    .de-topbar-inner {
+        @apply grid w-full min-w-0 gap-2.5 px-3 py-2.5;
+        grid-template-columns: minmax(0, 1fr) auto;
+        grid-template-areas:
+            "brand switch"
+            "nav nav";
+    }
+
     .de-topbar-brand {
         @apply flex min-w-0 flex-col no-underline;
+        grid-area: brand;
         line-height: 1.1;
     }
 
@@ -17547,25 +17556,70 @@
     }
 
     .de-topbar-nav {
-        @apply flex flex-1 flex-wrap items-center gap-1.5;
-        min-width: 0;
+        @apply grid w-full min-w-0 gap-1.5;
+        grid-area: nav;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
     .de-topbar-link {
-        @apply rounded-full px-3 py-2 text-xs font-bold no-underline;
+        @apply flex min-h-11 items-center justify-center rounded-[14px] border px-2 py-2 text-center text-xs font-bold no-underline;
+        border-color: #e8dece;
+        background: #fffdf8;
         color: #6a6359;
-        background: transparent;
-        white-space: nowrap;
+        line-height: 1.2;
     }
 
-    .de-topbar-link.is-active,
-    .de-topbar-link:hover {
+    .de-topbar-link.is-active {
+        border-color: rgba(29, 111, 95, 0.28);
         background: var(--color-accent-soft);
         color: var(--color-accent);
+        box-shadow: inset 0 0 0 1px rgba(29, 111, 95, 0.08);
+    }
+
+    .de-topbar-link:hover {
+        border-color: rgba(29, 111, 95, 0.22);
+        background: var(--color-accent-soft);
+        color: var(--color-accent);
+        text-decoration: none;
     }
 
     .de-topbar-switch {
-        margin-left: auto;
+        @apply m-0 flex shrink-0 items-center;
+        grid-area: switch;
+    }
+
+    .de-topbar-switch-btn {
+        min-height: 2.35rem;
+        white-space: nowrap;
+    }
+
+    @media (min-width: 420px) {
+        .de-topbar-nav {
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+        }
+    }
+
+    @media (min-width: 768px) {
+        .de-topbar-inner {
+            @apply flex items-center gap-3 px-4 py-3;
+        }
+
+        .de-topbar-nav {
+            @apply flex flex-1 flex-wrap items-center gap-1.5;
+            grid-template-columns: none;
+        }
+
+        .de-topbar-link {
+            @apply min-h-0 rounded-full border-transparent bg-transparent px-3 py-2;
+        }
+
+        .de-topbar-link.is-active {
+            box-shadow: none;
+        }
+
+        .de-topbar-switch {
+            @apply ml-auto;
+        }
     }
 
     .de-dashboard {

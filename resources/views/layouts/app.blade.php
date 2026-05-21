@@ -20,20 +20,24 @@
 
     @if ($isDataEntryMode)
         <header class="de-topbar" aria-label="Data entry navigation">
-            <a class="de-topbar-brand" href="{{ route('data-entry.dashboard') }}">
-                <span>VHC</span>
-                <strong>Data entry</strong>
-            </a>
-            <nav class="de-topbar-nav" aria-label="Primary">
-                <a href="{{ route('data-entry.dashboard') }}" class="de-topbar-link {{ request()->routeIs('data-entry.dashboard') ? 'is-active' : '' }}">Home</a>
-                <a href="{{ route('brand-catalogue.index') }}" class="de-topbar-link {{ request()->routeIs('brand-catalogue.*') && ! $isBodyCareCatalogue ? 'is-active' : '' }}">Catalogue</a>
-                <a href="{{ route('body-care-brand-catalogue') }}" class="de-topbar-link {{ $isBodyCareCatalogue ? 'is-active' : '' }}">Body care</a>
-                <a href="{{ route('retail-products.index') }}" class="de-topbar-link {{ request()->routeIs('retail-products.*') ? 'is-active' : '' }}">Sellable</a>
-            </nav>
-            <form method="POST" action="{{ route('access.switch') }}" class="de-topbar-switch">
-                @csrf
-                <button type="submit" class="de-topbar-switch-btn">Switch mode</button>
-            </form>
+            <div class="de-topbar-inner">
+                <a class="de-topbar-brand" href="{{ route('data-entry.dashboard') }}">
+                    <span>VHC</span>
+                    <strong>Data entry</strong>
+                </a>
+
+                <nav class="de-topbar-nav" aria-label="Primary">
+                    <a href="{{ route('data-entry.dashboard') }}" class="de-topbar-link {{ request()->routeIs('data-entry.dashboard') ? 'is-active' : '' }}">Home</a>
+                    <a href="{{ route('brand-catalogue.index') }}" class="de-topbar-link {{ request()->routeIs('brand-catalogue.*') && ! $isBodyCareCatalogue ? 'is-active' : '' }}">Catalogue</a>
+                    <a href="{{ route('body-care-brand-catalogue') }}" class="de-topbar-link {{ $isBodyCareCatalogue ? 'is-active' : '' }}">Body care</a>
+                    <a href="{{ route('retail-products.index') }}" class="de-topbar-link {{ request()->routeIs('retail-products.*') ? 'is-active' : '' }}">Sellable</a>
+                </nav>
+
+                <form method="POST" action="{{ route('access.switch') }}" class="de-topbar-switch">
+                    @csrf
+                    <button type="submit" class="de-topbar-switch-btn">Switch mode</button>
+                </form>
+            </div>
         </header>
 
         <div class="app-main is-expanded de-app-main" id="app-main">
