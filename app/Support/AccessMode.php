@@ -46,6 +46,7 @@ class AccessMode
             'data-entry.dashboard',
             'brand-catalogue.*',
             'body-care-brand-catalogue',
+            'hair-extension-intake.*',
             'retail-products.*',
             'access.choose',
             'access.admin',
