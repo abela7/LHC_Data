@@ -132,8 +132,106 @@ function checkPublicFolder(string $relativePath): array
     return ['checked' => 1, 'missing' => 1, 'samples' => [$relativePath]];
 }
 
+/**
+ * @return array{checked:int,missing:int,samples:array<int,string>}
+ */
+function checkLocalhostPublicUrls(string $table, string $urlColumn): array
+{
+    if (! Schema::hasTable($table) || ! Schema::hasColumn($table, $urlColumn)) {
+        return ['checked' => 0, 'missing' => 0, 'samples' => []];
+    }
+
+    $checked = 0;
+    $missing = 0;
+    $samples = [];
+    $marker = '/LHC_Data/public/';
+
+    DB::table($table)
+        ->where($urlColumn, 'like', 'http://localhost/LHC_Data/public/%')
+        ->orderBy('id')
+        ->select('id', $urlColumn)
+        ->chunk(500, function ($rows) use (&$checked, &$missing, &$samples, $urlColumn, $table, $marker): void {
+            foreach ($rows as $row) {
+                $checked++;
+                $url = (string) $row->{$urlColumn};
+                $path = parse_url($url, PHP_URL_PATH) ?: '';
+                $markerPosition = strpos($path, $marker);
+
+                if ($markerPosition === false) {
+                    continue;
+                }
+
+                $relativePath = rawurldecode(ltrim(substr($path, $markerPosition + strlen($marker)), '/'));
+
+                if (! is_file(public_path($relativePath))) {
+                    $missing++;
+
+                    if (count($samples) < 12) {
+                        $samples[] = $table.'#'.$row->id.' -> '.$relativePath;
+                    }
+                }
+            }
+        });
+
+    return ['checked' => $checked, 'missing' => $missing, 'samples' => $samples];
+}
+
+/**
+ * @return array{checked:int,missing:int,samples:array<int,string>}
+ */
+function checkPdfSourcePaths(): array
+{
+    $tables = ['pdf_catalogue_pages', 'pdf_catalogue_products'];
+    $checkedPaths = [];
+    $missing = 0;
+    $samples = [];
+
+    foreach ($tables as $table) {
+        if (! Schema::hasTable($table) || ! Schema::hasColumn($table, 'source_path')) {
+            continue;
+        }
+
+        DB::table($table)
+            ->whereNotNull('source_path')
+            ->where('source_path', '<>', '')
+            ->distinct()
+            ->orderBy('source_path')
+            ->pluck('source_path')
+            ->each(function ($sourcePath) use (&$checkedPaths, &$missing, &$samples, $table): void {
+                $sourcePath = (string) $sourcePath;
+                $normalized = str_replace('\\', '/', $sourcePath);
+                $marker = '/public/';
+                $markerPosition = stripos($normalized, $marker);
+
+                $candidate = $sourcePath;
+                if ($markerPosition !== false) {
+                    $candidate = public_path(substr($normalized, $markerPosition + strlen($marker)));
+                } elseif (! str_contains($normalized, '/') && str_ends_with(strtolower($normalized), '.pdf')) {
+                    $candidate = public_path($normalized);
+                }
+
+                if (isset($checkedPaths[$candidate])) {
+                    return;
+                }
+
+                $checkedPaths[$candidate] = true;
+
+                if (! is_file($candidate)) {
+                    $missing++;
+
+                    if (count($samples) < 12) {
+                        $samples[] = $table.' -> '.$sourcePath;
+                    }
+                }
+            });
+    }
+
+    return ['checked' => count($checkedPaths), 'missing' => $missing, 'samples' => $samples];
+}
+
 $checks = [
     'catalogue_images.storage_path' => checkPublicDiskPaths('catalogue_images', 'storage_path', 'storage_disk'),
+    'catalogue_images.external_url local public files' => checkLocalhostPublicUrls('catalogue_images', 'external_url'),
     'product_media.storage_path' => checkPublicDiskPaths('product_media', 'storage_path', 'storage_disk'),
     'hair_extension_intakes.photo_path' => checkPublicDiskPaths('hair_extension_intakes', 'photo_path', 'photo_disk'),
     'hair_extension_intake_photos.storage_path' => checkPublicDiskPaths('hair_extension_intake_photos', 'storage_path', 'storage_disk'),
@@ -143,6 +241,7 @@ $checks = [
     'mobile_capture_uploads.original_storage_path' => checkPublicDiskPaths('mobile_capture_uploads', 'original_storage_path', 'storage_disk'),
     'mobile_capture_uploads.processed_storage_path' => checkPublicDiskPaths('mobile_capture_uploads', 'processed_storage_path', 'storage_disk'),
     'watermark_settings.logo_path' => checkWatermarkLogo(),
+    'pdf_catalogue source PDFs' => checkPdfSourcePaths(),
     'shop_photo_batch_items.source_path' => checkShopPhotoBatchPaths(),
     'public/SHERRYS CATALOGUE' => checkPublicFolder('SHERRYS CATALOGUE'),
 ];

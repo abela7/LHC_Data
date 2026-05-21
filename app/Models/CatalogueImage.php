@@ -46,7 +46,7 @@ class CatalogueImage extends Model
     public function displayUrl(): ?string
     {
         if ($this->external_url) {
-            return $this->external_url;
+            return $this->portableExternalUrl((string) $this->external_url);
         }
 
         if (! $this->storage_disk || ! $this->storage_path) {
@@ -57,5 +57,28 @@ class CatalogueImage extends Model
         $path = parse_url($url, PHP_URL_PATH);
 
         return $path ?: $url;
+    }
+
+    private function portableExternalUrl(string $url): string
+    {
+        $host = parse_url($url, PHP_URL_HOST);
+        $path = parse_url($url, PHP_URL_PATH);
+
+        if (! $host || ! $path) {
+            return $url;
+        }
+
+        $localHosts = ['localhost', '127.0.0.1', '::1'];
+        $publicMarker = '/LHC_Data/public/';
+
+        if (! in_array(strtolower($host), $localHosts, true) || ! str_contains($path, $publicMarker)) {
+            return $url;
+        }
+
+        $relativePath = ltrim(substr($path, strpos($path, $publicMarker) + strlen($publicMarker)), '/');
+        $portableUrl = url($relativePath);
+        $query = parse_url($url, PHP_URL_QUERY);
+
+        return $query ? $portableUrl.'?'.$query : $portableUrl;
     }
 }
