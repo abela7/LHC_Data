@@ -13,6 +13,18 @@
         </header>
 
         <div class="de-dashboard-grid">
+            <a href="{{ route('hair-extension-intake.v2') }}" class="de-dashboard-card de-dashboard-card-intake">
+                <span class="de-dashboard-card-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M9 11l3 3L22 4"></path>
+                        <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
+                    </svg>
+                </span>
+                <strong>V2 product intake</strong>
+                <span>Add shop-floor hair extension products quickly from your phone.</span>
+                <em>Open intake</em>
+            </a>
+
             <a href="{{ route('brand-catalogue.index') }}" class="de-dashboard-card de-dashboard-card-catalogue">
                 <span class="de-dashboard-card-icon" aria-hidden="true">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
