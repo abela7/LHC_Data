@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AccessController;
 use App\Http\Controllers\BrandCatalogueController;
 use App\Http\Controllers\BrandCatalogueProductPublishController;
 use App\Http\Controllers\BrandController;
@@ -45,6 +46,13 @@ use App\Http\Controllers\ShabaReferenceController;
 use App\Http\Controllers\SourceProductController;
 use App\Http\Controllers\WatermarkSettingController;
 use Illuminate\Support\Facades\Route;
+
+Route::get('/access', [AccessController::class, 'choose'])->name('access.choose');
+Route::post('/access/data-entry', [AccessController::class, 'enterDataEntry'])->name('access.data-entry');
+Route::get('/access/admin', [AccessController::class, 'showAdminGate'])->name('access.admin');
+Route::post('/access/admin', [AccessController::class, 'enterAdmin'])->name('access.admin.submit');
+Route::post('/access/switch', [AccessController::class, 'switch'])->name('access.switch');
+Route::get('/data-entry', [AccessController::class, 'dataEntryDashboard'])->name('data-entry.dashboard');
 
 Route::get('/', [ObservedProductController::class, 'index'])->name('dashboard');
 Route::get('/invoice-generator', [InvoiceGeneratorController::class, 'create'])->name('invoice-generator.create');

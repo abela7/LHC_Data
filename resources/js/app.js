@@ -452,6 +452,16 @@ const initSidebar = () => {
         }
     }
 
+    const mqNarrow = window.matchMedia('(max-width: 1023px)');
+    const syncSidebarForViewport = () => {
+        if (mqNarrow.matches && !isMobile() && !isCollapsedDesktop()) {
+            collapseDesktop();
+        }
+    };
+
+    syncSidebarForViewport();
+    mqNarrow.addEventListener('change', syncSidebarForViewport);
+
     mqMobile.addEventListener('change', () => {
         if (!isMobile()) {
             closeMobileDrawer();
