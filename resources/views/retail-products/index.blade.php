@@ -165,103 +165,160 @@
                 </article>
             @else
                 <article class="card rp-families-card">
-                    <div class="table-wrap rp-families-table-wrap">
-                        <table class="rp-families-table">
-                            <thead>
-                                <tr>
-                                    <th class="rp-families-col-num">#</th>
-                                    <th>Brand</th>
-                                    <th>Family</th>
-                                    <th>Department</th>
-                                    <th>Type</th>
-                                    <th>Sources</th>
-                                    <th>Variants</th>
-                                    <th>SKUs</th>
-                                    <th>Readiness</th>
-                                    <th>Status</th>
-                                    <th class="rp-families-col-open">Open</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @foreach ($families as $index => $family)
-                                    @php
-                                        $detailUrl = route('retail-products.families.show', $family->id);
-                                        $skuCount = (int) $family->sku_count;
-                                        $missingPrice = (int) $family->missing_price_count;
-                                        $missingImage = (int) $family->missing_image_count;
-                                        $reviewCount = (int) $family->review_count;
-                                        $sourceBadges = collect(explode(',', (string) $family->source_types))
-                                            ->map(fn (string $type): string => trim($type))
-                                            ->filter()
-                                            ->map(fn (string $type): string => match ($type) {
-                                                'janson_product' => 'Janson',
-                                                'mamado_product' => 'Mamado',
-                                                'picture_product_confidence_a' => 'Photo A',
-                                                'picture_product_draft' => 'Photo draft',
-                                                default => Str::headline(str_replace('_', ' ', $type)),
-                                            })
-                                            ->unique()
-                                            ->values();
-                                        $variantSummary = trim((string) ($family->variant_summary ?? ''));
-                                        $variantOptionCount = (int) ($family->variant_option_count ?? 0);
-                                    @endphp
-                                    <tr class="clickable-row rp-families-row" data-href="{{ $detailUrl }}">
-                                        <td class="rp-families-num" data-label="#">{{ $families->firstItem() + $index }}</td>
-                                        <td class="rp-families-brand" data-label="Brand">
-                                            <strong>{{ $family->brand_name ?: 'Unknown' }}</strong>
-                                            @if ($family->line_name)
-                                                <div class="page-note">{{ $family->line_name }}</div>
-                                            @endif
-                                        </td>
-                                        <td class="rp-families-family" data-label="Family">
-                                            <span class="clickable-row-name">{{ $family->family_name }}</span>
-                                        </td>
-                                        <td class="rp-families-dept" data-label="Department">{{ $family->root_catalogue_name ?: '-' }}</td>
-                                        <td class="rp-families-type" data-label="Type">{{ $family->product_type_name ?: '-' }}</td>
-                                        <td class="rp-families-sources" data-label="Sources">
-                                            <div class="rp-families-pill-row">
-                                                @foreach ($sourceBadges as $sourceBadge)
-                                                    <span class="pill">{{ $sourceBadge }}</span>
-                                                @endforeach
-                                            </div>
-                                        </td>
-                                        <td class="rp-families-variants" data-label="Variants">
-                                            @if ($variantSummary !== '')
-                                                <span class="rp-families-variant-text" title="{{ $variantSummary }}">{{ Str::limit($variantSummary, 90) }}</span>
-                                                <div class="page-note">{{ number_format($variantOptionCount) }} option{{ $variantOptionCount === 1 ? '' : 's' }}</div>
-                                            @else
-                                                <span class="pill pill-warn">Needs variants</span>
-                                            @endif
-                                        </td>
-                                        <td class="rp-families-skus" data-label="SKUs">
-                                            <span class="rp-families-skus-value">{{ number_format($skuCount) }}</span>
-                                        </td>
-                                        <td class="rp-families-readiness" data-label="Readiness">
-                                            <div class="rp-families-pill-row">
-                                                @if ($reviewCount > 0)
-                                                    <span class="pill pill-warn">{{ number_format($reviewCount) }} review</span>
-                                                @endif
-                                                @if ($missingPrice > 0)
-                                                    <span class="pill">{{ number_format($missingPrice) }} no price</span>
-                                                @endif
-                                                @if ($missingImage > 0)
-                                                    <span class="pill">{{ number_format($missingImage) }} no image</span>
-                                                @endif
-                                                @if ($reviewCount === 0 && $missingPrice === 0 && $missingImage === 0)
-                                                    <span class="pill pill-success">Ready check</span>
-                                                @endif
-                                            </div>
-                                        </td>
-                                        <td class="rp-families-status" data-label="Status">
-                                            <span class="pill">{{ Str::headline($family->status ?: 'draft') }}</span>
-                                        </td>
-                                        <td class="rp-families-open" data-label="Open">
-                                            <a href="{{ $detailUrl }}" class="button button-primary clickable-row-stop">Open</a>
-                                        </td>
-                                    </tr>
-                                @endforeach
-                            </tbody>
-                        </table>
+                    <div class="rp-families-list" role="list">
+                        <div class="rp-families-list-head" aria-hidden="true">
+                            <span>#</span>
+                            <span>Brand</span>
+                            <span>Family</span>
+                            <span>Department</span>
+                            <span>Type</span>
+                            <span>Sources</span>
+                            <span>Variants</span>
+                            <span>SKUs</span>
+                            <span>Readiness</span>
+                            <span>Status</span>
+                            <span>Open</span>
+                        </div>
+
+                        @foreach ($families as $index => $family)
+                            @php
+                                $detailUrl = route('retail-products.families.show', $family->id);
+                                $skuCount = (int) $family->sku_count;
+                                $missingPrice = (int) $family->missing_price_count;
+                                $missingImage = (int) $family->missing_image_count;
+                                $reviewCount = (int) $family->review_count;
+                                $sourceBadges = collect(explode(',', (string) $family->source_types))
+                                    ->map(fn (string $type): string => trim($type))
+                                    ->filter()
+                                    ->map(fn (string $type): string => match ($type) {
+                                        'janson_product' => 'Janson',
+                                        'mamado_product' => 'Mamado',
+                                        'picture_product_confidence_a' => 'Photo A',
+                                        'picture_product_draft' => 'Photo draft',
+                                        default => Str::headline(str_replace('_', ' ', $type)),
+                                    })
+                                    ->unique()
+                                    ->values();
+                                $variantSummary = trim((string) ($family->variant_summary ?? ''));
+                                $variantOptionCount = (int) ($family->variant_option_count ?? 0);
+                                $departmentLabel = $family->root_catalogue_name ?: 'No department';
+                                $typeLabel = $family->product_type_name ?: 'No type';
+                            @endphp
+
+                            <article
+                                class="rp-family-item clickable-row"
+                                role="listitem"
+                                data-href="{{ $detailUrl }}"
+                            >
+                                <div class="rp-family-mobile-head">
+                                    <div class="rp-family-mobile-brand">
+                                        <strong>{{ $family->brand_name ?: 'Unknown' }}</strong>
+                                        @if ($family->line_name)
+                                            <span>{{ $family->line_name }}</span>
+                                        @endif
+                                    </div>
+                                    <a href="{{ $detailUrl }}" class="button button-primary clickable-row-stop rp-family-open-btn">Open</a>
+                                </div>
+
+                                <h3 class="rp-family-mobile-name">{{ $family->family_name }}</h3>
+
+                                <p class="rp-family-mobile-meta">
+                                    {{ $departmentLabel }} · {{ $typeLabel }} · {{ number_format($skuCount) }} SKU{{ $skuCount === 1 ? '' : 's' }}
+                                </p>
+
+                                <div class="rp-family-mobile-pills">
+                                    @foreach ($sourceBadges as $sourceBadge)
+                                        <span class="pill">{{ $sourceBadge }}</span>
+                                    @endforeach
+
+                                    @if ($reviewCount > 0)
+                                        <span class="pill pill-warn">{{ number_format($reviewCount) }} review</span>
+                                    @endif
+                                    @if ($missingPrice > 0)
+                                        <span class="pill">{{ number_format($missingPrice) }} no price</span>
+                                    @endif
+                                    @if ($missingImage > 0)
+                                        <span class="pill">{{ number_format($missingImage) }} no image</span>
+                                    @endif
+                                    @if ($reviewCount === 0 && $missingPrice === 0 && $missingImage === 0)
+                                        <span class="pill pill-success">Ready check</span>
+                                    @endif
+
+                                    <span class="pill">{{ Str::headline($family->status ?: 'draft') }}</span>
+                                </div>
+
+                                @if ($variantSummary !== '')
+                                    <p class="rp-family-mobile-variants" title="{{ $variantSummary }}">
+                                        {{ Str::limit($variantSummary, 72) }}
+                                        <span>{{ number_format($variantOptionCount) }} option{{ $variantOptionCount === 1 ? '' : 's' }}</span>
+                                    </p>
+                                @else
+                                    <p class="rp-family-mobile-variants is-empty">
+                                        <span class="pill pill-warn">Needs variants</span>
+                                    </p>
+                                @endif
+
+                                <span class="rp-family-desk rp-family-num">{{ $families->firstItem() + $index }}</span>
+
+                                <div class="rp-family-desk rp-family-brand">
+                                    <strong>{{ $family->brand_name ?: 'Unknown' }}</strong>
+                                    @if ($family->line_name)
+                                        <div class="page-note">{{ $family->line_name }}</div>
+                                    @endif
+                                </div>
+
+                                <div class="rp-family-desk rp-family-name">
+                                    <span class="clickable-row-name">{{ $family->family_name }}</span>
+                                </div>
+
+                                <div class="rp-family-desk rp-family-dept">{{ $family->root_catalogue_name ?: '-' }}</div>
+                                <div class="rp-family-desk rp-family-type">{{ $family->product_type_name ?: '-' }}</div>
+
+                                <div class="rp-family-desk rp-family-sources">
+                                    <div class="rp-families-pill-row">
+                                        @foreach ($sourceBadges as $sourceBadge)
+                                            <span class="pill">{{ $sourceBadge }}</span>
+                                        @endforeach
+                                    </div>
+                                </div>
+
+                                <div class="rp-family-desk rp-family-variants">
+                                    @if ($variantSummary !== '')
+                                        <span title="{{ $variantSummary }}">{{ Str::limit($variantSummary, 90) }}</span>
+                                        <div class="page-note">{{ number_format($variantOptionCount) }} option{{ $variantOptionCount === 1 ? '' : 's' }}</div>
+                                    @else
+                                        <span class="pill pill-warn">Needs variants</span>
+                                    @endif
+                                </div>
+
+                                <div class="rp-family-desk rp-family-skus">{{ number_format($skuCount) }}</div>
+
+                                <div class="rp-family-desk rp-family-readiness">
+                                    <div class="rp-families-pill-row">
+                                        @if ($reviewCount > 0)
+                                            <span class="pill pill-warn">{{ number_format($reviewCount) }} review</span>
+                                        @endif
+                                        @if ($missingPrice > 0)
+                                            <span class="pill">{{ number_format($missingPrice) }} no price</span>
+                                        @endif
+                                        @if ($missingImage > 0)
+                                            <span class="pill">{{ number_format($missingImage) }} no image</span>
+                                        @endif
+                                        @if ($reviewCount === 0 && $missingPrice === 0 && $missingImage === 0)
+                                            <span class="pill pill-success">Ready check</span>
+                                        @endif
+                                    </div>
+                                </div>
+
+                                <div class="rp-family-desk rp-family-status">
+                                    <span class="pill">{{ Str::headline($family->status ?: 'draft') }}</span>
+                                </div>
+
+                                <div class="rp-family-desk rp-family-open">
+                                    <a href="{{ $detailUrl }}" class="button button-primary clickable-row-stop">Open</a>
+                                </div>
+                            </article>
+                        @endforeach
                     </div>
                 </article>
 
@@ -274,7 +331,7 @@
 
     <script>
         document.addEventListener('DOMContentLoaded', function () {
-            document.querySelectorAll('.clickable-row[data-href]').forEach(function (row) {
+            document.querySelectorAll('.clickable-row[data-href], .rp-family-item[data-href]').forEach(function (row) {
                 row.addEventListener('click', function (event) {
                     if (event.target.closest('.clickable-row-stop')) return;
 

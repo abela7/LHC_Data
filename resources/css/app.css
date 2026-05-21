@@ -4118,227 +4118,201 @@
         color: var(--color-ink);
     }
 
-    /* Sellable families table — mobile-first cards, desktop table */
+    /* Sellable families list — compact mobile cards, desktop grid */
     .rp-families-card {
         padding: 0;
         overflow: hidden;
-    }
-
-    .rp-families-table-wrap {
-        overflow: visible;
     }
 
     .rp-families-pill-row {
         @apply flex flex-wrap gap-1;
     }
 
-    .rp-families-table .rp-families-col-num {
-        width: 3.5rem;
+    .rp-families-list {
+        @apply flex flex-col;
     }
 
-    .rp-families-table .rp-families-col-open {
-        width: 8rem;
+    .rp-families-list-head {
+        display: none;
+    }
+
+    .rp-family-item {
+        @apply flex flex-col gap-1.5 border-b px-3 py-3;
+        border-color: #ebe0cf;
+        background: #fffdf8;
+    }
+
+    .rp-family-item:last-child {
+        border-bottom: none;
+    }
+
+    .rp-family-mobile-head {
+        @apply flex items-start justify-between gap-2;
+    }
+
+    .rp-family-mobile-brand {
+        @apply min-w-0;
+    }
+
+    .rp-family-mobile-brand strong {
+        @apply block text-[10px] font-extrabold uppercase tracking-[0.12em];
+        color: #6d665e;
+    }
+
+    .rp-family-mobile-brand span {
+        @apply mt-0.5 block truncate text-[11px];
+        color: #8a847c;
+    }
+
+    .rp-family-open-btn {
+        @apply shrink-0;
+        min-height: 2rem;
+        padding-inline: 0.75rem;
+        font-size: 0.72rem;
+    }
+
+    .rp-family-mobile-name {
+        @apply m-0 text-base font-extrabold leading-snug;
+        letter-spacing: -0.02em;
+        color: var(--color-ink);
+        overflow-wrap: anywhere;
+    }
+
+    .rp-family-mobile-meta {
+        @apply m-0 text-xs leading-relaxed;
+        color: #6d665e;
+    }
+
+    .rp-family-mobile-pills {
+        @apply flex flex-wrap gap-1;
+    }
+
+    .rp-family-mobile-pills .pill {
+        @apply text-[10px];
+    }
+
+    .rp-family-mobile-variants {
+        @apply m-0 text-xs leading-relaxed;
+        color: #4f5450;
+    }
+
+    .rp-family-mobile-variants span {
+        @apply ml-1 font-semibold;
+        color: #8a847c;
+    }
+
+    .rp-family-mobile-variants.is-empty {
+        @apply m-0;
+    }
+
+    .rp-family-desk {
+        display: none;
     }
 
     @media (max-width: 767px) {
         .rp-families-card {
-            padding: 0.65rem;
-            overflow: visible;
+            @apply rounded-[18px] border;
+            border-color: #e8dece;
             background: transparent;
-            border: none;
             box-shadow: none;
         }
 
-        .rp-families-table-wrap {
-            overflow: visible;
+        .rp-family-item {
+            @apply mx-0 gap-1 rounded-[16px] border px-3 py-2.5 shadow-sm;
+            border-color: #e8dece;
+            margin-bottom: 0.65rem;
         }
 
-        .rp-families-table {
-            min-width: 0;
+        .rp-family-item:last-child {
+            margin-bottom: 0;
+            border-bottom: 1px solid #e8dece;
         }
 
-        .rp-families-table thead {
-            position: absolute;
-            width: 1px;
-            height: 1px;
-            padding: 0;
-            margin: -1px;
-            overflow: hidden;
-            clip: rect(0, 0, 0, 0);
-            white-space: nowrap;
-            border: 0;
-        }
-
-        .rp-families-table tbody {
-            display: flex;
-            flex-direction: column;
-            gap: 0.75rem;
-        }
-
-        .rp-families-table tbody tr.rp-families-row {
-            display: grid;
-            grid-template-columns: minmax(0, 1fr) auto;
-            grid-template-areas:
-                "brand open"
-                "family family"
-                "dept dept"
-                "type type"
-                "sources sources"
-                "variants variants"
-                "readiness readiness"
-                "status status"
-                "skus skus";
-            gap: 0.45rem 0.65rem;
-            padding: 0.85rem;
-            border: 1px solid #e8dece;
-            border-radius: 18px;
-            background: #fffdf8;
-            box-shadow: 0 8px 22px rgba(31, 36, 33, 0.06);
-        }
-
-        .rp-families-table tbody tr.rp-families-row:hover,
-        .rp-families-table tbody tr.rp-families-row:active {
-            background: #fffdf8;
-        }
-
-        .rp-families-table tbody td {
-            display: block;
-            padding: 0;
-            border: none;
-        }
-
-        .rp-families-table tbody td::before {
-            display: block;
-            margin-bottom: 0.2rem;
-            font-size: 0.62rem;
-            font-weight: 800;
-            letter-spacing: 0.1em;
-            text-transform: uppercase;
-            color: #8a847c;
-            content: attr(data-label);
-        }
-
-        .rp-families-num {
-            display: none !important;
-        }
-
-        .rp-families-brand {
-            grid-area: brand;
-            min-width: 0;
-        }
-
-        .rp-families-brand::before {
-            display: none !important;
-        }
-
-        .rp-families-brand strong {
-            display: block;
-            font-size: 0.82rem;
-            font-weight: 800;
-            letter-spacing: 0.06em;
-            text-transform: uppercase;
-            color: #6d665e;
-        }
-
-        .rp-families-family {
-            grid-area: family;
-        }
-
-        .rp-families-family::before {
-            display: none !important;
-        }
-
-        .rp-families-family .clickable-row-name {
-            display: block;
-            font-size: 1rem;
-            font-weight: 800;
-            line-height: 1.25;
-            letter-spacing: -0.02em;
-        }
-
-        .rp-families-dept {
-            grid-area: dept;
-        }
-
-        .rp-families-type {
-            grid-area: type;
-        }
-
-        .rp-families-dept,
-        .rp-families-type {
-            font-size: 0.82rem;
-            color: #4f5450;
-        }
-
-        .rp-families-sources {
-            grid-area: sources;
-        }
-
-        .rp-families-variants {
-            grid-area: variants;
-        }
-
-        .rp-families-variant-text {
-            display: block;
-            font-size: 0.84rem;
-            line-height: 1.4;
-            color: #3a3e3b;
-        }
-
-        .rp-families-readiness {
-            grid-area: readiness;
-        }
-
-        .rp-families-status {
-            grid-area: status;
-        }
-
-        .rp-families-skus {
-            grid-area: skus;
-            display: flex !important;
-            align-items: center;
-            gap: 0.35rem;
-        }
-
-        .rp-families-skus::before {
-            margin-bottom: 0 !important;
-        }
-
-        .rp-families-skus-value {
-            font-size: 0.92rem;
-            font-weight: 800;
-            font-variant-numeric: tabular-nums;
-            color: #1f2421;
-        }
-
-        .rp-families-open {
-            grid-area: open;
-            align-self: start;
-        }
-
-        .rp-families-open::before {
-            display: none !important;
-        }
-
-        .rp-families-open .button {
-            min-height: 2.35rem;
-            padding-inline: 0.85rem;
-            font-size: 0.78rem;
+        .rp-families-list {
+            @apply gap-0 p-2;
         }
     }
 
     @media (min-width: 768px) {
-        .rp-families-table tbody td::before {
+        .rp-family-mobile-head,
+        .rp-family-mobile-name,
+        .rp-family-mobile-meta,
+        .rp-family-mobile-pills,
+        .rp-family-mobile-variants {
             display: none;
         }
 
-        .rp-families-table .rp-families-num {
-            color: #9a9590;
-            font-variant-numeric: tabular-nums;
+        .rp-families-list-head,
+        .rp-family-item {
+            display: grid;
+            grid-template-columns:
+                2.5rem
+                minmax(6.5rem, 0.9fr)
+                minmax(8rem, 1.2fr)
+                minmax(5.5rem, 0.8fr)
+                minmax(5rem, 0.75fr)
+                minmax(5.5rem, 0.85fr)
+                minmax(6.5rem, 1fr)
+                3rem
+                minmax(6rem, 0.95fr)
+                minmax(4.5rem, 0.65fr)
+                5.5rem;
+            gap: 0.5rem 0.65rem;
+            align-items: start;
         }
 
-        .rp-families-table .rp-families-skus-value {
+        .rp-families-list-head {
+            @apply border-b px-3 py-2.5 text-[10px] font-extrabold uppercase tracking-[0.12em];
+            border-color: #ebe0cf;
+            background: #faf6ee;
+            color: #8a847c;
+        }
+
+        .rp-family-item {
+            @apply border-b px-3 py-2.5;
+            border-color: #ebe0cf;
+            background: #fffdf8;
+            margin-bottom: 0;
+            border-radius: 0;
+            box-shadow: none;
+        }
+
+        .rp-family-item:hover {
+            background: rgba(29, 111, 95, 0.05);
+        }
+
+        .rp-family-desk {
+            display: block;
+            min-width: 0;
+            font-size: 0.8125rem;
+            line-height: 1.35;
+        }
+
+        .rp-family-num {
+            color: #9a9590;
             font-variant-numeric: tabular-nums;
+            font-size: 0.75rem;
+        }
+
+        .rp-family-brand strong {
+            @apply font-semibold;
+            color: var(--color-ink);
+        }
+
+        .rp-family-name .clickable-row-name {
+            @apply font-medium;
+            color: var(--color-ink);
+        }
+
+        .rp-family-skus {
+            font-variant-numeric: tabular-nums;
+            font-weight: 600;
+        }
+
+        .rp-family-open .button {
+            min-height: 2rem;
+            padding-inline: 0.65rem;
+            font-size: 0.72rem;
         }
     }
 
