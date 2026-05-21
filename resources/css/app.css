@@ -10073,6 +10073,8 @@
         border-color: var(--color-edge);
         background: rgba(255, 253, 248, 0.92);
         box-shadow: 0 6px 18px rgba(31, 36, 33, 0.04);
+        container-type: inline-size;
+        container-name: rfm-skus-workspace;
     }
 
     .rfm-skus-workspace-head {
@@ -11651,7 +11653,7 @@
         display: none;
     }
 
-    @media (min-width: 768px) {
+    @container rfm-skus-workspace (min-width: 48rem) {
         .rfm-sku-list-head {
             display: grid;
             align-items: center;
@@ -11697,7 +11699,7 @@
         transition: background 0.12s ease;
     }
 
-    @media (min-width: 768px) {
+    @container rfm-skus-workspace (min-width: 48rem) {
         .rfm-sku-summary {
             @apply items-center px-3 py-2.5;
             grid-template-columns: 2.25rem minmax(0, 1fr) auto auto auto auto;
@@ -11706,6 +11708,10 @@
             min-height: 3rem;
             padding-top: 0.65rem;
             padding-bottom: 0.65rem;
+        }
+
+        .rfm-sku-summary > * {
+            grid-area: auto !important;
         }
     }
 
@@ -11743,13 +11749,13 @@
         @apply hidden;
     }
 
-    @media (min-width: 768px) {
+    @container rfm-skus-workspace (min-width: 48rem) {
         .rfm-sku-delete-label {
             @apply inline;
         }
     }
 
-    @media (min-width: 768px) {
+    @container rfm-skus-workspace (min-width: 48rem) {
         .rfm-sku-summary {
             @apply pr-3;
         }
@@ -11768,7 +11774,7 @@
         background: #f0ebe0;
     }
 
-    @media (min-width: 768px) {
+    @container rfm-skus-workspace (min-width: 48rem) {
         .rfm-row-thumb {
             width: 2.25rem;
             height: 2.25rem;
@@ -11854,7 +11860,7 @@
         color: var(--color-ink);
     }
 
-    @media (min-width: 768px) {
+    @container rfm-skus-workspace (min-width: 48rem) {
         .rfm-row-identity {
             display: none;
         }
@@ -11904,7 +11910,7 @@
         justify-self: stretch;
     }
 
-    @media (min-width: 768px) {
+    @container rfm-skus-workspace (min-width: 48rem) {
         .rfm-row-barcode {
             @apply w-auto min-h-0 justify-center rounded-full px-2.5 py-1 text-[10px];
             justify-self: auto;
@@ -12216,7 +12222,7 @@
         text-align: center;
     }
 
-    @media (min-width: 768px) {
+    @container rfm-skus-workspace (min-width: 48rem) {
         .rfm-row-price {
             @apply rounded-full px-2.5 py-1 text-[13px];
             min-height: 2rem;
@@ -12251,7 +12257,7 @@
         @apply sr-only;
     }
 
-    @media (min-width: 768px) {
+    @container rfm-skus-workspace (min-width: 48rem) {
         .rfm-row-view {
             @apply h-8 w-auto min-w-[4.5rem] rounded-full px-2.5;
         }
@@ -12286,7 +12292,7 @@
         transition: transform 0.18s ease;
     }
 
-    @media (min-width: 768px) {
+    @container rfm-skus-workspace (min-width: 48rem) {
         .rfm-row-chevron {
             @apply h-5 w-5 self-center text-sm;
         }
