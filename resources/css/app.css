@@ -13401,7 +13401,10 @@
 
     /* ── Quick image panel (enhanced) ── */
     .rfm-quick-image-panel {
-        @apply flex max-h-[92vh] w-full max-w-2xl flex-col gap-0 overflow-hidden p-0;
+        @apply flex w-full max-w-2xl flex-col gap-0 p-0;
+        max-height: min(92vh, 760px);
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
     }
 
     @media (max-width: 767px) {
@@ -13410,24 +13413,7 @@
         }
 
         .rfm-quick-image-panel {
-            @apply max-h-[94vh] max-w-none overflow-y-auto rounded-b-none rounded-t-[24px];
-            -webkit-overflow-scrolling: touch;
-        }
-
-        .rfm-quick-image-layout {
-            flex: none;
-            min-height: auto;
-        }
-
-        .rfm-quick-image-main {
-            flex: none;
-            overflow: visible;
-        }
-
-        .rfm-quick-image-media {
-            flex: none;
-            min-height: 0;
-            overflow: visible;
+            @apply max-h-[94vh] max-w-none rounded-b-none rounded-t-[24px];
         }
     }
 
@@ -13438,17 +13424,16 @@
 
         .rfm-quick-image-panel {
             width: min(100%, 56rem);
-            max-height: min(90vh, 760px);
         }
     }
 
     .rfm-quick-image-layout {
-        @apply flex min-h-0 flex-1 flex-col;
+        @apply flex flex-col;
     }
 
     @media (min-width: 768px) {
         .rfm-quick-image-layout {
-            @apply flex-row;
+            @apply min-h-0 flex-1 flex-row;
         }
     }
 
@@ -13461,18 +13446,26 @@
             width: 17.5rem;
             border-right: 1px solid #e5dbc9;
             background: #fffdf8;
-            overflow-y: auto;
         }
     }
 
     .rfm-quick-image-main {
-        @apply flex min-h-0 min-w-0 flex-1 flex-col;
+        @apply flex min-w-0 flex-col;
     }
 
-    @media (min-width: 768px) {
-        .rfm-quick-image-main {
-            overflow-y: auto;
-        }
+    .rfm-quick-image-media {
+        @apply px-3 py-3;
+    }
+
+    .rfm-quick-image-media .rfm-media-add,
+    .rfm-quick-image-form {
+        @apply flex flex-col;
+        flex: none;
+        height: auto;
+    }
+
+    .rfm-quick-image-form .rfm-media-tab-panels {
+        flex: none;
     }
 
     body.rfm-quick-image-open {
@@ -13742,10 +13735,6 @@
     .rfm-quick-image-workflow-step.is-done:not(.is-active) {
         border-color: rgba(29, 111, 95, 0.25);
         color: var(--color-accent);
-    }
-
-    .rfm-quick-image-media {
-        @apply min-h-0 flex-1 overflow-y-auto px-3 py-3;
     }
 
     @media (min-width: 768px) {
