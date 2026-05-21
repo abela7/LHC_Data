@@ -1594,34 +1594,34 @@ class BrandCatalogueController extends Controller
 
     private function assertBrandInCatalogue(BrandCatalogue $catalogue, BrandCatalogueBrand $brand): void
     {
-        abort_unless($brand->brand_catalogue_id === $catalogue->id, 404);
+        abort_unless((int) $brand->brand_catalogue_id === (int) $catalogue->id, 404);
     }
 
     private function assertLineInBrand(BrandCatalogueBrand $brand, BrandCatalogueLine $line): void
     {
-        abort_unless($line->brand_catalogue_brand_id === $brand->id, 404);
+        abort_unless((int) $line->brand_catalogue_brand_id === (int) $brand->id, 404);
     }
 
     private function assertProductTypeInLine(BrandCatalogueLine $line, BrandCatalogueProductType $productType): void
     {
-        abort_unless($productType->brand_catalogue_line_id === $line->id, 404);
-        abort_unless($productType->brand_catalogue_brand_id === $line->brand_catalogue_brand_id, 404);
+        abort_unless((int) $productType->brand_catalogue_line_id === (int) $line->id, 404);
+        abort_unless((int) $productType->brand_catalogue_brand_id === (int) $line->brand_catalogue_brand_id, 404);
     }
 
     private function assertMaterialInProductType(BrandCatalogueProductType $productType, BrandCatalogueMaterial $material): void
     {
-        abort_unless($material->brand_catalogue_product_type_id === $productType->id, 404);
+        abort_unless((int) $material->brand_catalogue_product_type_id === (int) $productType->id, 404);
     }
 
     private function assertStyleInProductType(BrandCatalogueBrand $brand, BrandCatalogueProductType $productType, BrandCatalogueStyle $style): void
     {
-        abort_unless($style->brand_catalogue_brand_id === $brand->id, 404);
-        abort_unless((int) $style->brand_catalogue_product_type_id === $productType->id, 404);
+        abort_unless((int) $style->brand_catalogue_brand_id === (int) $brand->id, 404);
+        abort_unless((int) $style->brand_catalogue_product_type_id === (int) $productType->id, 404);
     }
 
     private function assertSkuInStyle(BrandCatalogueStyle $style, BrandCatalogueSku $sku): void
     {
-        abort_unless((int) $sku->brand_catalogue_style_id === $style->id, 404);
+        abort_unless((int) $sku->brand_catalogue_style_id === (int) $style->id, 404);
     }
 
     private function nullTrim(?string $value): ?string
