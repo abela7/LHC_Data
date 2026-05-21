@@ -444,10 +444,12 @@ const initSidebar = () => {
         }
     });
 
-    if (!isMobile() && localStorage.getItem('sidebar-collapsed') === '1') {
-        collapseDesktop();
-    } else if (!isMobile() && !isCollapsedDesktop()) {
-        setHamburgerExpanded(true);
+    if (!isMobile()) {
+        if (localStorage.getItem('sidebar-collapsed') === '0') {
+            expandDesktop();
+        } else {
+            collapseDesktop();
+        }
     }
 
     mqMobile.addEventListener('change', () => {
@@ -6456,7 +6458,7 @@ const initHairIntakeWizard = () => {
                     </div>
                     <div class="hew-bottom-bar">
                         <button class="hew-btn primary" type="button" data-hew-action="accept-selected" ${state.selectedCandidateId ? '' : 'disabled'}>Use selected</button>
-                        <a class="hew-btn" href="/LHC_Data/public/hair-extension-product-intake/v2">Build from scratch</a>
+                        <a class="hew-btn" href="${escapeHtml(routes.v2 || '#')}">Build from scratch</a>
                     </div>
                 </div>
             `;
@@ -6466,7 +6468,7 @@ const initHairIntakeWizard = () => {
                 <h2>Not found</h2>
                 <p class="hew-muted">${escapeHtml(match.reasoning || 'No match found in the catalogue.')}</p>
                 <div class="hew-bottom-bar">
-                    <a class="hew-btn primary" href="/LHC_Data/public/hair-extension-product-intake/v2">Build from scratch</a>
+                    <a class="hew-btn primary" href="${escapeHtml(routes.v2 || '#')}">Build from scratch</a>
                     <button class="hew-btn" type="button" data-hew-action="go-step" data-step="1">Try again</button>
                 </div>
             </div>
@@ -6838,7 +6840,7 @@ const initHairIntakeWizard = () => {
                     <p class="hew-muted">${completeCount} variant${completeCount === 1 ? '' : 's'} are now live.</p>
                     <div class="hew-actions" style="justify-content:center">
                         <a class="hew-btn primary" href="${escapeHtml(state.session.published_family_url || '#')}">View product</a>
-                        <a class="hew-btn" href="${escapeHtml(routes.store ? routes.store.replace(/\/$/, '') : '/LHC_Data/public/hair-extension-product-intake/wizard')}">New intake</a>
+                        <a class="hew-btn" href="${escapeHtml(routes.index || '#')}">New intake</a>
                     </div>
                 </div>
             `;
@@ -7507,7 +7509,7 @@ const initHairIntakeWizard = () => {
                 setSession(data.session);
                 showToast(data.message || 'Photo removed.');
             } else if (action === 'save-exit') {
-                window.location.href = '/LHC_Data/public/hair-extension-product-intake/wizard';
+                window.location.href = routes.index || routes.sessions || window.location.href;
             }
         } catch (error) {
             showToast(error.message, true);

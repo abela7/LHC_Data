@@ -23,7 +23,7 @@
         hidden
         aria-hidden="true"
     ></div>
-    <aside class="sidebar" id="sidebar" aria-label="Primary navigation">
+    <aside class="sidebar is-collapsed" id="sidebar" aria-label="Primary navigation">
         <div class="sidebar-head">
             <div>
                 <p class="eyebrow">Catalogue staging</p>
@@ -138,7 +138,7 @@
         </nav>
     </aside>
 
-    <div class="app-main" id="app-main">
+    <div class="app-main is-expanded" id="app-main">
         <header class="topnav-bar" id="topnav-bar">
             <div class="topnav-left">
                 <button

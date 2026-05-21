@@ -582,8 +582,10 @@ class HairExtensionIntakeWizardController extends Controller
             'session' => $session ? $this->sessionPayload($session) : null,
             'reference' => $this->referencePayload(),
             'routes' => [
+                'index' => route('hair-extension-intake.wizard.index'),
                 'store' => route('hair-extension-intake.wizard.store'),
                 'sessions' => route('hair-extension-intake.wizard.sessions'),
+                'v2' => route('hair-extension-intake.v2'),
             ],
         ];
     }
