@@ -17532,7 +17532,7 @@
     }
 
     .de-topbar-inner {
-        @apply grid w-full min-w-0 gap-2.5 px-3 py-2.5;
+        @apply grid w-full min-w-0 gap-2 px-3 py-2;
         grid-template-columns: minmax(0, 1fr) auto;
         grid-template-areas:
             "brand switch"
@@ -17542,31 +17542,31 @@
     .de-topbar-brand {
         @apply flex min-w-0 flex-col no-underline;
         grid-area: brand;
-        line-height: 1.1;
+        line-height: 1.05;
     }
 
     .de-topbar-brand span {
-        @apply text-[10px] font-extrabold uppercase tracking-[0.16em];
+        @apply text-[9px] font-extrabold uppercase tracking-[0.14em];
         color: var(--color-accent);
     }
 
     .de-topbar-brand strong {
-        @apply text-base font-bold;
+        @apply text-sm font-bold;
         color: var(--color-ink);
     }
 
     .de-topbar-nav {
-        @apply grid w-full min-w-0 gap-1.5;
+        @apply grid w-full min-w-0 gap-1;
         grid-area: nav;
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
     .de-topbar-link {
-        @apply flex min-h-11 items-center justify-center rounded-[14px] border px-2 py-2 text-center text-xs font-bold no-underline;
+        @apply flex min-h-8 items-center justify-center rounded-[10px] border px-1.5 py-1 text-center text-[11px] font-bold no-underline;
         border-color: #e8dece;
         background: #fffdf8;
         color: #6a6359;
-        line-height: 1.2;
+        line-height: 1.15;
     }
 
     .de-topbar-link.is-active {
@@ -17589,13 +17589,22 @@
     }
 
     .de-topbar-switch-btn {
-        min-height: 2.35rem;
+        min-height: 2rem;
+        padding-inline: 0.65rem;
+        padding-block: 0.35rem;
+        font-size: 0.62rem;
         white-space: nowrap;
     }
 
     @media (min-width: 420px) {
         .de-topbar-nav {
             grid-template-columns: repeat(4, minmax(0, 1fr));
+        }
+
+        .de-topbar-link {
+            min-height: 2rem;
+            padding-inline: 0.45rem;
+            font-size: 0.68rem;
         }
     }
 
@@ -17610,7 +17619,7 @@
         }
 
         .de-topbar-link {
-            @apply min-h-0 rounded-full border-transparent bg-transparent px-3 py-2;
+            @apply min-h-0 rounded-full border-transparent bg-transparent px-2.5 py-1.5 text-xs;
         }
 
         .de-topbar-link.is-active {
