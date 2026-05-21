@@ -164,12 +164,12 @@
                     </div>
                 </article>
             @else
-                <article class="card" style="padding:0; overflow:hidden;">
-                    <div class="table-wrap">
-                        <table>
+                <article class="card rp-families-card">
+                    <div class="table-wrap rp-families-table-wrap">
+                        <table class="rp-families-table">
                             <thead>
                                 <tr>
-                                    <th style="width:4rem">#</th>
+                                    <th class="rp-families-col-num">#</th>
                                     <th>Brand</th>
                                     <th>Family</th>
                                     <th>Department</th>
@@ -179,7 +179,7 @@
                                     <th>SKUs</th>
                                     <th>Readiness</th>
                                     <th>Status</th>
-                                    <th style="width:8rem">Open</th>
+                                    <th class="rp-families-col-open">Open</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -205,51 +205,57 @@
                                         $variantSummary = trim((string) ($family->variant_summary ?? ''));
                                         $variantOptionCount = (int) ($family->variant_option_count ?? 0);
                                     @endphp
-                                    <tr class="clickable-row" data-href="{{ $detailUrl }}">
-                                        <td style="color:#9a9590;font-variant-numeric:tabular-nums;">{{ $families->firstItem() + $index }}</td>
-                                        <td>
+                                    <tr class="clickable-row rp-families-row" data-href="{{ $detailUrl }}">
+                                        <td class="rp-families-num" data-label="#">{{ $families->firstItem() + $index }}</td>
+                                        <td class="rp-families-brand" data-label="Brand">
                                             <strong>{{ $family->brand_name ?: 'Unknown' }}</strong>
                                             @if ($family->line_name)
                                                 <div class="page-note">{{ $family->line_name }}</div>
                                             @endif
                                         </td>
-                                        <td>
+                                        <td class="rp-families-family" data-label="Family">
                                             <span class="clickable-row-name">{{ $family->family_name }}</span>
                                         </td>
-                                        <td>{{ $family->root_catalogue_name ?: '-' }}</td>
-                                        <td>{{ $family->product_type_name ?: '-' }}</td>
-                                        <td>
-                                            @foreach ($sourceBadges as $sourceBadge)
-                                                <span class="pill">{{ $sourceBadge }}</span>
-                                            @endforeach
+                                        <td class="rp-families-dept" data-label="Department">{{ $family->root_catalogue_name ?: '-' }}</td>
+                                        <td class="rp-families-type" data-label="Type">{{ $family->product_type_name ?: '-' }}</td>
+                                        <td class="rp-families-sources" data-label="Sources">
+                                            <div class="rp-families-pill-row">
+                                                @foreach ($sourceBadges as $sourceBadge)
+                                                    <span class="pill">{{ $sourceBadge }}</span>
+                                                @endforeach
+                                            </div>
                                         </td>
-                                        <td>
+                                        <td class="rp-families-variants" data-label="Variants">
                                             @if ($variantSummary !== '')
-                                                <span title="{{ $variantSummary }}">{{ Str::limit($variantSummary, 90) }}</span>
+                                                <span class="rp-families-variant-text" title="{{ $variantSummary }}">{{ Str::limit($variantSummary, 90) }}</span>
                                                 <div class="page-note">{{ number_format($variantOptionCount) }} option{{ $variantOptionCount === 1 ? '' : 's' }}</div>
                                             @else
                                                 <span class="pill pill-warn">Needs variants</span>
                                             @endif
                                         </td>
-                                        <td>{{ number_format($skuCount) }}</td>
-                                        <td>
-                                            @if ($reviewCount > 0)
-                                                <span class="pill pill-warn">{{ number_format($reviewCount) }} review</span>
-                                            @endif
-                                            @if ($missingPrice > 0)
-                                                <span class="pill">{{ number_format($missingPrice) }} no price</span>
-                                            @endif
-                                            @if ($missingImage > 0)
-                                                <span class="pill">{{ number_format($missingImage) }} no image</span>
-                                            @endif
-                                            @if ($reviewCount === 0 && $missingPrice === 0 && $missingImage === 0)
-                                                <span class="pill pill-success">Ready check</span>
-                                            @endif
+                                        <td class="rp-families-skus" data-label="SKUs">
+                                            <span class="rp-families-skus-value">{{ number_format($skuCount) }}</span>
                                         </td>
-                                        <td>
+                                        <td class="rp-families-readiness" data-label="Readiness">
+                                            <div class="rp-families-pill-row">
+                                                @if ($reviewCount > 0)
+                                                    <span class="pill pill-warn">{{ number_format($reviewCount) }} review</span>
+                                                @endif
+                                                @if ($missingPrice > 0)
+                                                    <span class="pill">{{ number_format($missingPrice) }} no price</span>
+                                                @endif
+                                                @if ($missingImage > 0)
+                                                    <span class="pill">{{ number_format($missingImage) }} no image</span>
+                                                @endif
+                                                @if ($reviewCount === 0 && $missingPrice === 0 && $missingImage === 0)
+                                                    <span class="pill pill-success">Ready check</span>
+                                                @endif
+                                            </div>
+                                        </td>
+                                        <td class="rp-families-status" data-label="Status">
                                             <span class="pill">{{ Str::headline($family->status ?: 'draft') }}</span>
                                         </td>
-                                        <td>
+                                        <td class="rp-families-open" data-label="Open">
                                             <a href="{{ $detailUrl }}" class="button button-primary clickable-row-stop">Open</a>
                                         </td>
                                     </tr>

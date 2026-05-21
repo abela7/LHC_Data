@@ -14,85 +14,75 @@
             <button type="button" class="rfm-quick-image-close" data-rfm-quick-image-close aria-label="Close">×</button>
         </header>
 
-        <div class="rfm-quick-image-preview-zone">
-            <div class="rfm-quick-image-preview" data-rfm-quick-image-preview-current>
-                <span class="rfm-quick-image-preview-label">Current</span>
-                <button type="button"
-                        class="rfm-quick-image-preview-frame"
-                        data-rfm-quick-image-view-open="current"
-                        hidden
-                        aria-label="View current image full size">
-                    <img src="" alt="" data-rfm-quick-image-current-img>
-                    <span class="rfm-quick-image-preview-zoom" aria-hidden="true">
-                        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
-                            <circle cx="11" cy="11" r="7"></circle>
-                            <path d="m20 20-3.5-3.5M11 8v6M8 11h6" stroke-linecap="round"></path>
-                        </svg>
-                    </span>
-                </button>
-                <div class="rfm-quick-image-preview-frame is-empty" data-rfm-quick-image-preview-empty-wrap>
-                    <p class="rfm-quick-image-preview-empty" data-rfm-quick-image-preview-empty>No image yet</p>
+        <div class="rfm-quick-image-layout">
+            <aside class="rfm-quick-image-aside">
+                <div class="rfm-quick-image-preview-zone">
+                    <div class="rfm-quick-image-preview" data-rfm-quick-image-preview-current>
+                        <span class="rfm-quick-image-preview-label">Current</span>
+                        <button type="button"
+                                class="rfm-quick-image-preview-frame"
+                                data-rfm-quick-image-view-open="current"
+                                hidden
+                                aria-label="View current image full size">
+                            <img src="" alt="" data-rfm-quick-image-current-img>
+                            <span class="rfm-quick-image-preview-zoom" aria-hidden="true">
+                                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="11" cy="11" r="7"></circle>
+                                    <path d="m20 20-3.5-3.5M11 8v6M8 11h6" stroke-linecap="round"></path>
+                                </svg>
+                            </span>
+                        </button>
+                        <div class="rfm-quick-image-preview-frame is-empty" data-rfm-quick-image-preview-empty-wrap>
+                            <p class="rfm-quick-image-preview-empty" data-rfm-quick-image-preview-empty>No image yet</p>
+                        </div>
+                    </div>
+                    <div class="rfm-quick-image-preview" data-rfm-quick-image-preview-next hidden>
+                        <span class="rfm-quick-image-preview-label">New photo</span>
+                        <button type="button"
+                                class="rfm-quick-image-preview-frame"
+                                data-rfm-quick-image-view-open="next"
+                                aria-label="View new photo full size">
+                            <img src="" alt="" data-rfm-quick-image-next-img>
+                            <span class="rfm-quick-image-preview-zoom" aria-hidden="true">
+                                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="11" cy="11" r="7"></circle>
+                                    <path d="m20 20-3.5-3.5M11 8v6M8 11h6" stroke-linecap="round"></path>
+                                </svg>
+                            </span>
+                        </button>
+                    </div>
                 </div>
-            </div>
-            <div class="rfm-quick-image-preview" data-rfm-quick-image-preview-next hidden>
-                <span class="rfm-quick-image-preview-label">New photo</span>
-                <button type="button"
-                        class="rfm-quick-image-preview-frame"
-                        data-rfm-quick-image-view-open="next"
-                        aria-label="View new photo full size">
-                    <img src="" alt="" data-rfm-quick-image-next-img>
-                    <span class="rfm-quick-image-preview-zoom" aria-hidden="true">
-                        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
-                            <circle cx="11" cy="11" r="7"></circle>
-                            <path d="m20 20-3.5-3.5M11 8v6M8 11h6" stroke-linecap="round"></path>
-                        </svg>
-                    </span>
-                </button>
-            </div>
-        </div>
 
-        <div class="rfm-quick-image-viewer" data-rfm-quick-image-viewer hidden aria-hidden="true" role="dialog" aria-modal="true" aria-label="Image gallery">
-            <button type="button" class="rfm-quick-image-viewer-backdrop" data-rfm-quick-image-viewer-close aria-label="Close gallery"></button>
-            <div class="rfm-quick-image-viewer-stage">
-                <button type="button" class="rfm-quick-image-viewer-close" data-rfm-quick-image-viewer-close aria-label="Close">×</button>
-                <button type="button" class="rfm-quick-image-viewer-nav is-prev" data-rfm-quick-image-viewer-prev hidden aria-label="Previous image">‹</button>
-                <figure class="rfm-quick-image-viewer-figure">
-                    <img src="" alt="" data-rfm-quick-image-viewer-img decoding="async">
-                    <figcaption data-rfm-quick-image-viewer-caption></figcaption>
-                </figure>
-                <button type="button" class="rfm-quick-image-viewer-nav is-next" data-rfm-quick-image-viewer-next hidden aria-label="Next image">›</button>
-                <span class="rfm-quick-image-viewer-counter" data-rfm-quick-image-viewer-counter hidden></span>
-            </div>
-        </div>
+                <div class="rfm-quick-image-preview-actions">
+                    <button type="button" class="rfm-quick-image-remove" data-rfm-quick-image-delete hidden>
+                        Remove current image
+                    </button>
+                </div>
 
-        <div class="rfm-quick-image-preview-actions">
-            <button type="button" class="rfm-quick-image-remove" data-rfm-quick-image-delete hidden>
-                Remove current image
-            </button>
-        </div>
+                <section class="rfm-quick-image-saved" data-rfm-quick-image-saved hidden>
+                    <div class="rfm-quick-image-saved-head">
+                        <span data-rfm-quick-image-saved-title>Saved photos</span>
+                        <em data-rfm-quick-image-saved-count>0</em>
+                    </div>
+                    <div class="rfm-quick-image-saved-grid" data-rfm-quick-image-saved-grid></div>
+                    <p class="rfm-quick-image-saved-empty" data-rfm-quick-image-saved-empty>No saved photos yet.</p>
+                </section>
+            </aside>
 
-        <section class="rfm-quick-image-saved" data-rfm-quick-image-saved hidden>
-            <div class="rfm-quick-image-saved-head">
-                <span data-rfm-quick-image-saved-title>Saved photos</span>
-                <em data-rfm-quick-image-saved-count>0</em>
-            </div>
-            <div class="rfm-quick-image-saved-grid" data-rfm-quick-image-saved-grid></div>
-            <p class="rfm-quick-image-saved-empty" data-rfm-quick-image-saved-empty>No saved photos yet.</p>
-        </section>
+            <div class="rfm-quick-image-main">
+                <div class="rfm-quick-image-workflow" data-rfm-quick-image-workflow role="group" aria-label="Suggested photo sequence">
+                    <button type="button" class="rfm-quick-image-workflow-step" data-rfm-quick-image-workflow-step="main">
+                        <em>1</em><span>Main</span>
+                    </button>
+                    <button type="button" class="rfm-quick-image-workflow-step" data-rfm-quick-image-workflow-step="variant">
+                        <em>2</em><span>Variant</span>
+                    </button>
+                    <button type="button" class="rfm-quick-image-workflow-step" data-rfm-quick-image-workflow-step="gallery">
+                        <em>3</em><span>Gallery</span>
+                    </button>
+                </div>
 
-        <div class="rfm-quick-image-workflow" data-rfm-quick-image-workflow role="group" aria-label="Suggested photo sequence">
-            <button type="button" class="rfm-quick-image-workflow-step" data-rfm-quick-image-workflow-step="main">
-                <em>1</em><span>Main</span>
-            </button>
-            <button type="button" class="rfm-quick-image-workflow-step" data-rfm-quick-image-workflow-step="variant">
-                <em>2</em><span>Variant</span>
-            </button>
-            <button type="button" class="rfm-quick-image-workflow-step" data-rfm-quick-image-workflow-step="gallery">
-                <em>3</em><span>Gallery</span>
-            </button>
-        </div>
-
-        <div class="rfm-media rfm-quick-image-media" data-rfm-media-manager>
+                <div class="rfm-media rfm-quick-image-media" data-rfm-media-manager>
             <form method="POST"
                   action="#"
                   enctype="multipart/form-data"
@@ -235,6 +225,22 @@
                     <button type="submit" class="rfm-save-btn rfm-media-add-btn" data-rfm-quick-image-submit>Add image</button>
                 </footer>
             </form>
+                </div>
+            </div>
+        </div>
+
+        <div class="rfm-quick-image-viewer" data-rfm-quick-image-viewer hidden aria-hidden="true" role="dialog" aria-modal="true" aria-label="Image gallery">
+            <button type="button" class="rfm-quick-image-viewer-backdrop" data-rfm-quick-image-viewer-close aria-label="Close gallery"></button>
+            <div class="rfm-quick-image-viewer-stage">
+                <button type="button" class="rfm-quick-image-viewer-close" data-rfm-quick-image-viewer-close aria-label="Close">×</button>
+                <button type="button" class="rfm-quick-image-viewer-nav is-prev" data-rfm-quick-image-viewer-prev hidden aria-label="Previous image">‹</button>
+                <figure class="rfm-quick-image-viewer-figure">
+                    <img src="" alt="" data-rfm-quick-image-viewer-img decoding="async">
+                    <figcaption data-rfm-quick-image-viewer-caption></figcaption>
+                </figure>
+                <button type="button" class="rfm-quick-image-viewer-nav is-next" data-rfm-quick-image-viewer-next hidden aria-label="Next image">›</button>
+                <span class="rfm-quick-image-viewer-counter" data-rfm-quick-image-viewer-counter hidden></span>
+            </div>
         </div>
     </section>
 </div>
