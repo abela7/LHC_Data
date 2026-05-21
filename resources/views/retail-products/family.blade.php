@@ -152,6 +152,15 @@
             ->all(),
         'skus' => $ecomPreviewSkus,
     ];
+
+    $variantGroupTypeOptions = [
+        ['value' => 'measurement', 'label' => 'Length / size'],
+        ['value' => 'colour_name', 'label' => 'Colour name'],
+        ['value' => 'colour_code', 'label' => 'Colour code'],
+        ['value' => 'short_code', 'label' => 'Short code'],
+        ['value' => 'count', 'label' => 'Pack / count'],
+        ['value' => 'text', 'label' => 'Text'],
+    ];
 @endphp
 
 @section('content')
@@ -338,8 +347,7 @@
         </details>
 
         {{-- Variant model summary --}}
-        @if ($family->variantGroups->isNotEmpty())
-            <details class="rfm-section rfm-hub-panel">
+        <details class="rfm-section rfm-hub-panel" id="rfm-variant-model">
                 <summary>
                     <div>
                         <p class="rfm-eyebrow">Variant model</p>
@@ -349,7 +357,12 @@
                 </summary>
                 <div class="rfm-section-body">
                     <div class="rfm-variant-refresh">
-                        @if ($missingComboCount > 0)
+                        @if ($family->variantGroups->isEmpty())
+                            <div class="rfm-variant-refresh-empty" role="status">
+                                <strong>No variant groups yet.</strong>
+                                Add Length, Colour, Pack Count or another axis below, then add values and create sellable SKUs.
+                            </div>
+                        @elseif ($missingComboCount > 0)
                             <form method="POST"
                                   action="{{ route('retail-products.families.refresh-skus', $family) }}"
                                   data-rfm-refresh-skus-form
@@ -371,6 +384,41 @@
                         @endif
                     </div>
 
+                    <form method="POST"
+                          action="{{ route('retail-products.families.variant-groups.store', $family) }}"
+                          class="rfm-variant-group-form">
+                        @csrf
+                        <div class="rfm-variant-group-form-head">
+                            <strong>Add variant group</strong>
+                            <span>Use this for a new SKU axis like Length, Colour or Pack Count.</span>
+                        </div>
+                        <label class="rfm-shared-field">
+                            <span class="rfm-shared-label">Group name</span>
+                            <input type="text"
+                                   name="name"
+                                   value="{{ old('name') }}"
+                                   placeholder="Length, Colour, Pack Count"
+                                   maxlength="255"
+                                   autocomplete="off">
+                        </label>
+                        <label class="rfm-shared-field">
+                            <span class="rfm-shared-label">Group type</span>
+                            <select name="variant_type" required>
+                                @foreach ($variantGroupTypeOptions as $typeOption)
+                                    <option value="{{ $typeOption['value'] }}" @selected(old('variant_type', 'text') === $typeOption['value'])>
+                                        {{ $typeOption['label'] }}
+                                    </option>
+                                @endforeach
+                            </select>
+                        </label>
+                        <button type="submit" class="rfm-variant-group-add-btn">Add group</button>
+                        @if ($products->isNotEmpty())
+                            <p class="rfm-variant-group-note">
+                                Existing SKUs are not changed. New values create new SKU combinations only when you choose them.
+                            </p>
+                        @endif
+                    </form>
+
                     <div class="rfm-variant-list">
                         @foreach ($family->variantGroups as $group)
                             @php
@@ -381,12 +429,34 @@
                                     str_contains(mb_strtolower($group->name), 'pack') => '3X, 100g, 500g…',
                                     default => 'Value 1, Value 2…',
                                 };
+                                $groupUsedCount = $products->sum(
+                                    fn ($product) => $product->variantValues->where('product_variant_group_id', $group->id)->count(),
+                                );
                             @endphp
                             <article class="rfm-variant-item">
-                                <header>
-                                    <h3>{{ $group->name }}</h3>
-                                    <span>{{ str_replace('_', ' ', $group->variant_type) }}</span>
+                                <header class="rfm-variant-item-head">
+                                    <div>
+                                        <h3>{{ $group->name }}</h3>
+                                        <span>{{ str_replace('_', ' ', $group->variant_type) }}</span>
+                                    </div>
+                                    <form method="POST"
+                                          action="{{ route('retail-products.families.variant-groups.destroy', [$family, $group]) }}"
+                                          onsubmit="return confirm('Remove variant group {{ addslashes($group->name) }}? This also removes unused values under it.');">
+                                        @csrf
+                                        @method('DELETE')
+                                        <button type="submit"
+                                                class="rfm-variant-group-remove"
+                                                @disabled($groupUsedCount > 0)
+                                                title="{{ $groupUsedCount > 0 ? 'This group is used by '.$groupUsedCount.' SKU'.($groupUsedCount === 1 ? '' : 's') : 'Remove unused group' }}">
+                                            Remove
+                                        </button>
+                                    </form>
                                 </header>
+                                @if ($groupUsedCount > 0)
+                                    <p class="rfm-variant-group-usage">
+                                        Used by {{ $groupUsedCount }} SKU{{ $groupUsedCount === 1 ? '' : 's' }}. Delete or edit those SKUs before removing this group.
+                                    </p>
+                                @endif
                                 <div class="rfm-variant-chip-field"
                                      data-rfm-variant-chip-field
                                      data-group-id="{{ $group->id }}"
@@ -435,9 +505,12 @@
                             Create sellable SKUs
                         </button>
                     </div>
+
+                    <a href="#rfm-add-sku" class="rfm-variant-combo-link" data-rfm-open-target="#rfm-add-sku">
+                        Create one SKU from selected variant combination
+                    </a>
                 </div>
             </details>
-        @endif
 
         <div class="rfm-hub-stack rfm-hub-tools" aria-label="Family tools">
             <details class="rfm-family-shared rfm-ai-naming-hub-panel rfm-hub-panel" data-rfm-shared-panel>
@@ -1364,7 +1437,7 @@
 
             </div>
 
-            <details class="rfm-family-shared rfm-add-sku rfm-skus-workspace-panel" data-rfm-shared-panel>
+            <details id="rfm-add-sku" class="rfm-family-shared rfm-add-sku rfm-skus-workspace-panel" data-rfm-shared-panel>
                 <summary>
                     <div>
                         <span>Add sellable SKU</span>

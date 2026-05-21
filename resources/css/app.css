@@ -10225,6 +10225,81 @@
         background: #f2e6d2;
     }
 
+    .rfm-variant-group-form {
+        @apply mb-3 grid gap-3 rounded-[14px] border p-3 md:grid-cols-[1.2fr_1fr_auto];
+        border-color: #d9eadf;
+        background: linear-gradient(135deg, rgba(232, 246, 241, 0.9), rgba(255, 250, 243, 0.95));
+    }
+
+    .rfm-variant-group-form-head {
+        @apply flex flex-col gap-1 md:col-span-3;
+    }
+
+    .rfm-variant-group-form-head strong {
+        @apply text-sm font-black;
+        color: var(--color-ink);
+    }
+
+    .rfm-variant-group-form-head span,
+    .rfm-variant-group-note,
+    .rfm-variant-group-usage {
+        @apply m-0 text-xs leading-relaxed;
+        color: #6f776f;
+    }
+
+    .rfm-variant-group-form .rfm-shared-field {
+        @apply m-0;
+    }
+
+    .rfm-variant-group-add-btn,
+    .rfm-variant-combo-link {
+        @apply inline-flex min-h-11 items-center justify-center rounded-full px-4 text-sm font-black;
+        background: var(--color-accent);
+        color: #fffaf3;
+    }
+
+    .rfm-variant-group-add-btn {
+        @apply w-full self-end border-0;
+    }
+
+    .rfm-variant-combo-link {
+        @apply mt-3 w-full text-center no-underline;
+    }
+
+    .rfm-variant-item-head {
+        @apply mb-2 flex items-start justify-between gap-2;
+    }
+
+    .rfm-variant-item header.rfm-variant-item-head {
+        @apply items-start;
+    }
+
+    .rfm-variant-item-head > div {
+        @apply min-w-0;
+    }
+
+    .rfm-variant-item-head form {
+        @apply shrink-0;
+    }
+
+    .rfm-variant-group-remove {
+        @apply inline-flex min-h-9 items-center justify-center rounded-full border px-3 text-xs font-black;
+        border-color: #f0c7c2;
+        background: #fff7f5;
+        color: #8a2a22;
+    }
+
+    .rfm-variant-group-remove:disabled {
+        @apply cursor-not-allowed opacity-45;
+    }
+
+    .rfm-variant-group-usage {
+        @apply mb-2 rounded-[10px] border px-2.5 py-2;
+        border-color: #f0e1c6;
+        background: #fff8eb;
+        color: #7a5c2a;
+    }
+
     .rfm-section[open] > summary {
         border-bottom: 1px solid var(--color-edge);
     }

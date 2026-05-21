@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\InventoryLocation;
 use App\Models\InventorySection;
 use App\Models\BrandCatalogueSku;
+use App\Models\BrandCatalogueVariant;
 use App\Models\BrandCatalogueVariantOption;
 use App\Models\Product;
 use App\Models\ProductCategoryAssignment;
@@ -885,19 +886,28 @@ class RetailProductController extends Controller
             return 0;
         }
 
-        $totalCombos = 1;
         foreach ($family->variantGroups as $group) {
-            $count = $group->options->count();
-            if ($count === 0) {
+            if ($group->options->isEmpty()) {
                 return 0;
             }
-            $totalCombos *= $count;
         }
 
-        $existingCount = count($this->existingFamilyVariantSignatures($family));
-        $missing = $totalCombos - $existingCount;
+        $existingSignatures = $this->existingFamilyVariantSignatures($family);
+        $missing = 0;
 
-        return $missing > 0 ? $missing : 0;
+        foreach ($this->cartesianFamilyVariantCombinations($family) as $combo) {
+            $signature = collect($combo)
+                ->map(fn (ProductVariantOption $option): int => (int) $option->id)
+                ->sort()
+                ->values()
+                ->implode(',');
+
+            if (! isset($existingSignatures[$signature])) {
+                $missing++;
+            }
+        }
+
+        return $missing;
     }
 
     /**
@@ -1411,6 +1421,78 @@ class RetailProductController extends Controller
 
             return true;
         })->values();
+    }
+
+    /**
+     * Add a new variant axis to this family, e.g. Length, Colour, Pack Count.
+     * Existing SKUs are left untouched; new SKUs can then be created from the
+     * new grouped combination.
+     */
+    public function storeFamilyVariantGroup(Request $request, ProductFamily $family): RedirectResponse
+    {
+        $data = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'variant_type' => ['required', 'string', Rule::in(BrandCatalogueVariant::TYPES)],
+        ]);
+
+        $name = trim(preg_replace('/\s+/', ' ', (string) $data['name']));
+        if ($name === '') {
+            throw ValidationException::withMessages([
+                'name' => 'Enter a variant group name.',
+            ]);
+        }
+
+        $duplicate = ProductVariantGroup::query()
+            ->where('product_family_id', $family->id)
+            ->whereRaw('LOWER(name) = ?', [mb_strtolower($name)])
+            ->first();
+
+        if ($duplicate) {
+            throw ValidationException::withMessages([
+                'name' => "\"{$duplicate->name}\" already exists on this family.",
+            ]);
+        }
+
+        ProductVariantGroup::query()->create([
+            'product_family_id' => $family->id,
+            'name' => $name,
+            'variant_type' => $data['variant_type'],
+            'sort_order' => ((int) ProductVariantGroup::query()
+                ->where('product_family_id', $family->id)
+                ->max('sort_order')) + 10,
+        ]);
+
+        return redirect()
+            ->to(route('retail-products.families.show', $family).'#rfm-variant-model')
+            ->with('status', "Added variant group \"{$name}\". Add values, then create SKUs from the combination.");
+    }
+
+    /**
+     * Remove an unused variant axis from this family.
+     * Refuses deletion when any SKU still stores a value for the group.
+     */
+    public function destroyFamilyVariantGroup(ProductFamily $family, ProductVariantGroup $group): RedirectResponse
+    {
+        $group = $this->familyVariantGroup($family, (int) $group->id);
+
+        $inUseCount = ProductVariantValue::query()
+            ->where('product_variant_group_id', $group->id)
+            ->count();
+
+        if ($inUseCount > 0) {
+            throw ValidationException::withMessages([
+                'variant_group' => "Cannot delete \"{$group->name}\" because {$inUseCount} sellable SKU"
+                    .($inUseCount === 1 ? ' uses' : 's use').' it. Remove or edit those SKUs first.',
+            ]);
+        }
+
+        $name = $group->name;
+        $optionCount = $group->options()->count();
+        $group->delete();
+
+        return redirect()
+            ->to(route('retail-products.families.show', $family).'#rfm-variant-model')
+            ->with('status', "Removed variant group \"{$name}\" and {$optionCount} unused value".($optionCount === 1 ? '' : 's').'.');
     }
 
     /**

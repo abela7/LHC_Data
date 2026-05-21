@@ -2202,6 +2202,20 @@ const initRetailFamilyManager = () => {
         }, 2200);
     };
 
+    root.querySelectorAll('[data-rfm-open-target]').forEach((link) => {
+        link.addEventListener('click', (event) => {
+            const selector = link.dataset.rfmOpenTarget;
+            if (!selector) return;
+            const target = document.querySelector(selector);
+            if (!target) return;
+            event.preventDefault();
+            if (target.tagName === 'DETAILS') {
+                target.open = true;
+            }
+            target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+    });
+
     // SKU filters (multi-select)
     const getSkuItems = () => root.querySelectorAll('[data-rfm-sku]');
     const searchInput = root.querySelector('[data-rfm-search]');
@@ -4022,6 +4036,14 @@ const initRetailFamilyManager = () => {
     initFamilyEcommercePreview(root);
     initFamilyDisplayNameEditor(root, csrf, showToast);
     initFamilySharedPanels(root);
+
+    if (window.location.hash) {
+        const target = document.getElementById(window.location.hash.slice(1));
+        if (target?.tagName === 'DETAILS') {
+            target.open = true;
+            window.setTimeout(() => target.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80);
+        }
+    }
 
     const skusWorkspace = document.getElementById('rfm-skus-workspace');
     if (skusWorkspace && new URLSearchParams(window.location.search).get('focus') === 'skus') {
