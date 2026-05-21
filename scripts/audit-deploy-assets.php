@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\ShopPhotoBatchItem;
+use App\Support\ShopPhotoLocator;
 use Illuminate\Contracts\Console\Kernel;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -229,6 +230,56 @@ function checkPdfSourcePaths(): array
     return ['checked' => count($checkedPaths), 'missing' => $missing, 'samples' => $samples];
 }
 
+/**
+ * @return array{checked:int,missing:int,samples:array<int,string>}
+ */
+function checkObservedPictureFiles(): array
+{
+    if (! Schema::hasTable('observed_products') || ! Schema::hasColumn('observed_products', 'picture_id')) {
+        return ['checked' => 0, 'missing' => 0, 'samples' => []];
+    }
+
+    $locator = app(ShopPhotoLocator::class);
+    $checked = 0;
+    $missing = 0;
+    $samples = [];
+
+    DB::table('observed_products')
+        ->whereNotNull('picture_id')
+        ->where('picture_id', '<>', '')
+        ->distinct()
+        ->orderBy('picture_id')
+        ->pluck('picture_id')
+        ->each(function ($pictureId) use (&$checked, &$missing, &$samples, $locator): void {
+            $checked++;
+            $pictureId = (string) $pictureId;
+
+            if ($locator->findPath($pictureId) === null) {
+                $missing++;
+
+                if (count($samples) < 12) {
+                    $samples[] = 'observed_products.picture_id -> '.$pictureId;
+                }
+            }
+        });
+
+    return ['checked' => $checked, 'missing' => $missing, 'samples' => $samples];
+}
+
+/**
+ * @return array{checked:int,missing:int,samples:array<int,string>}
+ */
+function checkStorageAppFile(string $relativePath): array
+{
+    $path = storage_path('app/'.$relativePath);
+
+    if (is_file($path)) {
+        return ['checked' => 1, 'missing' => 0, 'samples' => []];
+    }
+
+    return ['checked' => 1, 'missing' => 1, 'samples' => ['storage/app/'.$relativePath]];
+}
+
 $checks = [
     'catalogue_images.storage_path' => checkPublicDiskPaths('catalogue_images', 'storage_path', 'storage_disk'),
     'catalogue_images.external_url local public files' => checkLocalhostPublicUrls('catalogue_images', 'external_url'),
@@ -243,6 +294,8 @@ $checks = [
     'watermark_settings.logo_path' => checkWatermarkLogo(),
     'pdf_catalogue source PDFs' => checkPdfSourcePaths(),
     'shop_photo_batch_items.source_path' => checkShopPhotoBatchPaths(),
+    'observed_products.picture_id files' => checkObservedPictureFiles(),
+    'picture-product-map.json' => checkStorageAppFile('picture-product-map.json'),
     'public/SHERRYS CATALOGUE' => checkPublicFolder('SHERRYS CATALOGUE'),
 ];
 
