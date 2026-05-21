@@ -153,14 +153,7 @@
         'skus' => $ecomPreviewSkus,
     ];
 
-    $variantGroupTypeOptions = [
-        ['value' => 'measurement', 'label' => 'Length / size'],
-        ['value' => 'colour_name', 'label' => 'Colour name'],
-        ['value' => 'colour_code', 'label' => 'Colour code'],
-        ['value' => 'short_code', 'label' => 'Short code'],
-        ['value' => 'count', 'label' => 'Pack / count'],
-        ['value' => 'text', 'label' => 'Text'],
-    ];
+    $variantGroupTypeLabels = collect($variantGroupTypeOptions ?? [])->pluck('label', 'value');
 @endphp
 
 @section('content')
@@ -404,13 +397,24 @@
                         </label>
                         <label class="rfm-shared-field">
                             <span class="rfm-shared-label">Group type</span>
-                            <select name="variant_type" required>
+                            <select name="variant_type" required data-rfm-group-type-select>
                                 @foreach ($variantGroupTypeOptions as $typeOption)
                                     <option value="{{ $typeOption['value'] }}" @selected(old('variant_type', 'text') === $typeOption['value'])>
                                         {{ $typeOption['label'] }}
                                     </option>
                                 @endforeach
+                                <option value="__new" @selected(old('variant_type') === '__new')>+ Add new public type</option>
                             </select>
+                        </label>
+                        <label class="rfm-shared-field rfm-variant-group-type-new" data-rfm-group-type-new @if(old('variant_type') !== '__new') hidden @endif>
+                            <span class="rfm-shared-label">New public type</span>
+                            <input type="text"
+                                   name="new_variant_type_name"
+                                   value="{{ old('new_variant_type_name') }}"
+                                   placeholder="Texture, Finish, Cap size"
+                                   maxlength="255"
+                                   autocomplete="off">
+                            <small>After saving, this type becomes available on every family product.</small>
                         </label>
                         <button type="submit" class="rfm-variant-group-add-btn">Add group</button>
                         @if ($products->isNotEmpty())
@@ -438,7 +442,7 @@
                                 <header class="rfm-variant-item-head">
                                     <div>
                                         <h3>{{ $group->name }}</h3>
-                                        <span>{{ str_replace('_', ' ', $group->variant_type) }}</span>
+                                        <span>{{ $variantGroupTypeLabels[$group->variant_type] ?? str_replace(['_', '-'], ' ', $group->variant_type) }}</span>
                                     </div>
                                     <form method="POST"
                                           action="{{ route('retail-products.families.variant-groups.destroy', [$family, $group]) }}"

@@ -2216,6 +2216,24 @@ const initRetailFamilyManager = () => {
         });
     });
 
+    root.querySelectorAll('[data-rfm-group-type-select]').forEach((select) => {
+        const form = select.closest('form');
+        const customField = form?.querySelector('[data-rfm-group-type-new]');
+        const customInput = customField?.querySelector('input');
+        const syncCustomType = () => {
+            const isCustom = select.value === '__new';
+            if (customField) customField.hidden = !isCustom;
+            if (customInput) {
+                customInput.required = isCustom;
+                if (isCustom) {
+                    window.setTimeout(() => customInput.focus(), 30);
+                }
+            }
+        };
+        select.addEventListener('change', syncCustomType);
+        syncCustomType();
+    });
+
     // SKU filters (multi-select)
     const getSkuItems = () => root.querySelectorAll('[data-rfm-sku]');
     const searchInput = root.querySelector('[data-rfm-search]');

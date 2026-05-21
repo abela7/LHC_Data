@@ -5,7 +5,6 @@ namespace App\Http\Controllers;
 use App\Models\InventoryLocation;
 use App\Models\InventorySection;
 use App\Models\BrandCatalogueSku;
-use App\Models\BrandCatalogueVariant;
 use App\Models\BrandCatalogueVariantOption;
 use App\Models\Product;
 use App\Models\ProductCategoryAssignment;
@@ -16,6 +15,7 @@ use App\Models\ProductPrice;
 use App\Models\ProductSource;
 use App\Models\ProductVariantGroup;
 use App\Models\ProductVariantOption;
+use App\Models\ProductVariantGroupType;
 use App\Models\ProductVariantValue;
 use App\Services\HairIntakeBarcodeService;
 use App\Services\OpenAiRetailNamingService;
@@ -335,6 +335,7 @@ class RetailProductController extends Controller
             'newSkuPrefix' => $this->familySkuPrefix($family),
             'missingComboCount' => $this->countMissingFamilyCombos($family),
             'variantOptionSellable' => $this->variantOptionSellableMap($family),
+            'variantGroupTypeOptions' => $this->variantGroupTypeOptions(),
             'inventoryLocations' => InventoryLocation::with(['sections' => fn ($q) => $q->where('is_active', true)->orderBy('sort_order')->orderBy('name')])->where('is_active', true)->orderBy('sort_order')->orderBy('name')->get(),
         ]);
     }
@@ -1432,7 +1433,8 @@ class RetailProductController extends Controller
     {
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
-            'variant_type' => ['required', 'string', Rule::in(BrandCatalogueVariant::TYPES)],
+            'variant_type' => ['required', 'string', 'max:100'],
+            'new_variant_type_name' => ['nullable', 'string', 'max:255'],
         ]);
 
         $name = trim(preg_replace('/\s+/', ' ', (string) $data['name']));
@@ -1453,10 +1455,15 @@ class RetailProductController extends Controller
             ]);
         }
 
+        $variantType = $this->resolveVariantGroupTypeSlug(
+            (string) $data['variant_type'],
+            $data['new_variant_type_name'] ?? null,
+        );
+
         ProductVariantGroup::query()->create([
             'product_family_id' => $family->id,
             'name' => $name,
-            'variant_type' => $data['variant_type'],
+            'variant_type' => $variantType,
             'sort_order' => ((int) ProductVariantGroup::query()
                 ->where('product_family_id', $family->id)
                 ->max('sort_order')) + 10,
@@ -2910,6 +2917,92 @@ class RetailProductController extends Controller
 
             return null;
         }
+    }
+
+    /**
+     * @return list<array{value: string, label: string}>
+     */
+    private function defaultVariantGroupTypeOptions(): array
+    {
+        return [
+            ['value' => 'measurement', 'label' => 'Length / size'],
+            ['value' => 'colour_name', 'label' => 'Colour name'],
+            ['value' => 'colour_code', 'label' => 'Colour code'],
+            ['value' => 'short_code', 'label' => 'Short code'],
+            ['value' => 'count', 'label' => 'Pack / count'],
+            ['value' => 'text', 'label' => 'Text'],
+        ];
+    }
+
+    /**
+     * @return list<array{value: string, label: string}>
+     */
+    private function variantGroupTypeOptions(): array
+    {
+        try {
+            $options = ProductVariantGroupType::query()
+                ->orderBy('sort_order')
+                ->orderBy('name')
+                ->get()
+                ->map(fn (ProductVariantGroupType $type): array => [
+                    'value' => $type->slug,
+                    'label' => $type->name,
+                ])
+                ->values()
+                ->all();
+
+            return $options !== [] ? $options : $this->defaultVariantGroupTypeOptions();
+        } catch (\Throwable) {
+            return $this->defaultVariantGroupTypeOptions();
+        }
+    }
+
+    private function resolveVariantGroupTypeSlug(string $selectedType, ?string $newTypeName): string
+    {
+        if ($selectedType === '__new') {
+            $name = trim(preg_replace('/\s+/', ' ', (string) $newTypeName));
+            if ($name === '') {
+                throw ValidationException::withMessages([
+                    'new_variant_type_name' => 'Enter the new public group type name.',
+                ]);
+            }
+
+            $baseSlug = mb_substr(Str::slug($name), 0, 80) ?: 'custom-type';
+
+            $existing = ProductVariantGroupType::query()
+                ->where('slug', $baseSlug)
+                ->orWhereRaw('LOWER(name) = ?', [mb_strtolower($name)])
+                ->first();
+
+            if ($existing) {
+                return $existing->slug;
+            }
+
+            $slug = $baseSlug;
+            $counter = 2;
+            while (ProductVariantGroupType::query()->where('slug', $slug)->exists()) {
+                $suffix = '-'.$counter++;
+                $slug = mb_substr($baseSlug, 0, 80 - mb_strlen($suffix)).$suffix;
+            }
+
+            ProductVariantGroupType::query()->create([
+                'name' => $name,
+                'slug' => $slug,
+                'is_system' => false,
+                'sort_order' => ((int) ProductVariantGroupType::query()->max('sort_order')) + 10,
+            ]);
+
+            return $slug;
+        }
+
+        $allowed = collect($this->variantGroupTypeOptions())->pluck('value');
+        if (! $allowed->contains($selectedType)) {
+            throw ValidationException::withMessages([
+                'variant_type' => 'Choose a valid group type, or add a new public one.',
+            ]);
+        }
+
+        return $selectedType;
     }
 
     /**
