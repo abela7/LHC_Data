@@ -172,10 +172,12 @@ class ShopPhotoBatchController extends Controller
 
     public function image(ShopPhotoBatch $batch, ShopPhotoBatchItem $item): BinaryFileResponse
     {
-        abort_unless($item->shop_photo_batch_id === $batch->id, Response::HTTP_NOT_FOUND);
-        abort_unless(is_file($item->source_path), Response::HTTP_NOT_FOUND);
+        abort_unless((int) $item->shop_photo_batch_id === (int) $batch->id, Response::HTTP_NOT_FOUND);
 
-        return response()->file($item->source_path, [
+        $sourcePath = $item->resolvedSourcePath();
+        abort_unless($sourcePath !== null, Response::HTTP_NOT_FOUND);
+
+        return response()->file($sourcePath, [
             'Cache-Control' => 'public, max-age=86400',
         ]);
     }
@@ -472,11 +474,13 @@ class ShopPhotoBatchController extends Controller
 
     private function copyBatchPhotoToIntake(ShopPhotoBatchItem $item, HairExtensionIntake $intake): void
     {
-        if (! is_file($item->source_path)) {
+        $sourcePath = $item->resolvedSourcePath();
+
+        if ($sourcePath === null) {
             return;
         }
 
-        $extension = pathinfo($item->source_path, PATHINFO_EXTENSION) ?: 'jpg';
+        $extension = pathinfo($sourcePath, PATHINFO_EXTENSION) ?: 'jpg';
         $targetName = Str::slug(collect([$intake->brand_name, $intake->style_name, 'photo-'.$item->sequence])->filter()->implode(' '));
         $directory = 'hair-extension-intake/evidence/'.$intake->id.'-'.$targetName;
         $filename = $targetName.'.'.$extension;
@@ -488,7 +492,7 @@ class ShopPhotoBatchController extends Controller
             $counter++;
         }
 
-        Storage::disk('public')->put($path, file_get_contents($item->source_path));
+        Storage::disk('public')->put($path, file_get_contents($sourcePath));
 
         $intake->photos()->create([
             'image_role' => 'main',
@@ -497,8 +501,8 @@ class ShopPhotoBatchController extends Controller
             'storage_disk' => 'public',
             'storage_path' => $path,
             'original_filename' => $item->original_filename ?: $item->filename,
-            'mime_type' => mime_content_type($item->source_path) ?: null,
-            'file_size' => filesize($item->source_path) ?: null,
+            'mime_type' => mime_content_type($sourcePath) ?: null,
+            'file_size' => filesize($sourcePath) ?: null,
             'source_type' => 'shop_photo_batch',
             'is_primary' => true,
             'sort_order' => 1,

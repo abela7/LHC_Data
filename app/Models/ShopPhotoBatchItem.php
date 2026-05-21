@@ -25,4 +25,32 @@ class ShopPhotoBatchItem extends Model
     {
         return $this->belongsTo(HairExtensionIntake::class, 'hair_extension_intake_id');
     }
+
+    public function resolvedSourcePath(): ?string
+    {
+        $sourcePath = trim((string) $this->source_path);
+
+        if ($sourcePath === '') {
+            return null;
+        }
+
+        $candidates = [$sourcePath];
+        $normalized = str_replace('\\', '/', $sourcePath);
+        $marker = 'Shop Photos/';
+        $markerPosition = stripos($normalized, $marker);
+
+        if ($markerPosition !== false) {
+            $candidates[] = base_path(substr($normalized, $markerPosition));
+        } elseif (str_starts_with($normalized, $marker)) {
+            $candidates[] = base_path($normalized);
+        }
+
+        foreach (array_unique($candidates) as $candidate) {
+            if (is_file($candidate)) {
+                return $candidate;
+            }
+        }
+
+        return null;
+    }
 }
