@@ -7,7 +7,7 @@
     <button type="button" class="rfm-quick-backdrop" data-rfm-quick-image-close aria-label="Close"></button>
     <section class="rfm-quick-panel rfm-quick-image-panel" role="dialog" aria-modal="true" aria-label="Add SKU image">
         <header class="rfm-quick-image-head">
-            <div>
+            <div class="rfm-quick-image-head-copy">
                 <span class="rfm-quick-image-eyebrow">Product image</span>
                 <strong class="rfm-quick-image-title" data-rfm-quick-image-title>Add image</strong>
             </div>
