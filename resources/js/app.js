@@ -1,6 +1,6 @@
 import './bootstrap';
 
-const normalizeImageUploadFile = async (file, maxDimension = 2200, quality = 0.88) => {
+const normalizeImageUploadFile = async (file, maxDimension = 1600, quality = 0.82) => {
     if (!file || !file.type?.startsWith('image/') || file.type === 'image/gif') {
         return file;
     }
@@ -56,6 +56,49 @@ const normalizeImageUploadFile = async (file, maxDimension = 2200, quality = 0.8
     } finally {
         URL.revokeObjectURL(objectUrl);
     }
+};
+
+const jsonResponseOrText = async (response) => {
+    const contentType = response.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) {
+        return response.json().catch(() => ({}));
+    }
+
+    return {
+        _text: await response.text().catch(() => ''),
+    };
+};
+
+const firstLaravelError = (payload) => {
+    if (!payload || typeof payload !== 'object') return '';
+    if (payload.message) return payload.message;
+    const errors = Object.values(payload.errors || {}).flat().filter(Boolean);
+
+    return errors[0] || '';
+};
+
+const uploadFailureMessage = (response, payload, fallback = 'Unable to save image.') => {
+    const serverMessage = firstLaravelError(payload);
+    if (serverMessage) return serverMessage;
+
+    if (response.status === 413) {
+        return 'The photo is too large for the server upload limit. Try a smaller photo or increase upload limits on cPanel.';
+    }
+
+    if (response.status === 419) {
+        return 'Your page session expired. Refresh the page, then try the photo again.';
+    }
+
+    if (response.status >= 500) {
+        return 'The server failed while saving the image. Check storage/logs/laravel.log and the cPanel error log.';
+    }
+
+    const text = String(payload?._text || '').replace(/\s+/g, ' ').trim();
+    if (text) {
+        return `${fallback} Server returned HTTP ${response.status}: ${text.slice(0, 180)}`;
+    }
+
+    return `${fallback} Server returned HTTP ${response.status}.`;
 };
 
 const selectedMediaUploadFile = (cameraInput, uploadInput) => {
@@ -330,10 +373,9 @@ const initPicturePreviewModal = () => {
                 body: payload,
                 headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
             });
-            const data = await response.json().catch(() => ({}));
+            const data = await jsonResponseOrText(response);
             if (!response.ok) {
-                const message = data.message || Object.values(data.errors || {}).flat()[0] || 'Unable to replace image.';
-                throw new Error(message);
+                throw new Error(uploadFailureMessage(response, data, 'Unable to replace image.'));
             }
 
             setStatus('Image replaced.');
@@ -2229,10 +2271,9 @@ const initRetailMediaManagers = () => {
                     body: payload,
                     headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
                 });
-                const data = await response.json().catch(() => ({}));
+                const data = await jsonResponseOrText(response);
                 if (!response.ok) {
-                    const message = data.message || Object.values(data.errors || {}).flat()[0] || 'Unable to add image.';
-                    throw new Error(message);
+                    throw new Error(uploadFailureMessage(response, data, 'Unable to add image.'));
                 }
 
                 if (window.LHCStyleWorkspace?.refreshAfterImageChange) {
@@ -2293,10 +2334,9 @@ const initRetailMediaManagers = () => {
                         body: payload,
                         headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
                     });
-                    const data = await response.json().catch(() => ({}));
+                    const data = await jsonResponseOrText(response);
                     if (!response.ok) {
-                        const message = data.message || Object.values(data.errors || {}).flat()[0] || 'Unable to upload pasted image.';
-                        throw new Error(message);
+                        throw new Error(uploadFailureMessage(response, data, 'Unable to upload pasted image.'));
                     }
                     setStatus('Saved.');
                     if (window.LHCStyleWorkspace?.refreshAfterImageChange) {
@@ -3665,10 +3705,9 @@ const initRetailFamilyManager = () => {
                 body: payload,
                 headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
             });
-            const data = await response.json().catch(() => ({}));
+            const data = await jsonResponseOrText(response);
             if (!response.ok) {
-                const message = data.message || Object.values(data.errors || {}).flat()[0] || 'Unable to save image.';
-                throw new Error(message);
+                throw new Error(uploadFailureMessage(response, data, 'Unable to save image.'));
             }
 
             quickImageCompletedRoles.add(currentRole);
