@@ -60,6 +60,23 @@ return [
             'report' => false,
         ],
 
+        // Cloudflare R2 (S3-compatible) — storage for the Pink-Commerce (Railway) root project.
+        // Product images published from this app are uploaded here, and their public
+        // URLs are sent to the Pink-Commerce API. Requires the R2_* env vars (see .env.example).
+        'r2' => [
+            'driver' => 's3',
+            'key' => env('R2_ACCESS_KEY_ID'),
+            'secret' => env('R2_SECRET_ACCESS_KEY'),
+            'region' => env('R2_DEFAULT_REGION', 'auto'),
+            'bucket' => env('R2_BUCKET'),
+            'endpoint' => env('R2_ENDPOINT'),
+            // Public base URL used to build object URLs (the bucket's r2.dev URL or a custom domain).
+            'url' => env('R2_PUBLIC_URL'),
+            'use_path_style_endpoint' => true,
+            'throw' => false,
+            'report' => false,
+        ],
+
     ],
 
     /*

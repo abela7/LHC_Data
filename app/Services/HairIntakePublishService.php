@@ -16,8 +16,10 @@ use App\Models\ProductPrice;
 use App\Models\ProductSource;
 use App\Models\ReviewAction;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use RuntimeException;
+use Throwable;
 
 class HairIntakePublishService
 {
@@ -41,7 +43,7 @@ class HairIntakePublishService
             throw new RuntimeException('This session has no matched catalogue style to publish.');
         }
 
-        return DB::transaction(function () use ($session, $style): ProductFamily {
+        $family = DB::transaction(function () use ($session, $style): ProductFamily {
             $families = $session->familyGroups->isNotEmpty()
                 ? $session->familyGroups->map(fn (IntakeSessionFamilyGroup $group): ProductFamily => $this->publishGroup($session, $style, $group))
                 : collect([$this->publishGroup($session, $style, null)]);
@@ -59,6 +61,18 @@ class HairIntakePublishService
 
             return $family->fresh(['products.price', 'products.media', 'media']);
         });
+
+        // Best-effort mirror to Pink-Commerce (Railway) + R2 after the transaction commits.
+        try {
+            app(PinkCommerceBridge::class)->pushFamily($family);
+        } catch (Throwable $e) {
+            Log::warning('PinkCommerce push failed (publish unaffected)', [
+                'family_id' => $family->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
+
+        return $family;
     }
 
     private function publishGroup(IntakeSession $session, BrandCatalogueStyle $style, ?IntakeSessionFamilyGroup $group): ProductFamily
