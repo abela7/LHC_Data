@@ -180,7 +180,7 @@ class SkuCodeAllocator
 
             $next = $this->peekNextSeqForBrandNamespace(
                 $family->root_catalogue_name,
-                $family->brand_id,
+                $this->nullableInt($family->brand_id),
                 $family->brand?->sku_code
             );
 
@@ -484,9 +484,18 @@ class SkuCodeAllocator
     {
         return $this->peekNextSeqForBrandNamespace(
             $family->root_catalogue_name,
-            $family->brand_id,
+            $this->nullableInt($family->brand_id),
             $family->brand?->sku_code
         );
+    }
+
+    private function nullableInt(mixed $value): ?int
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        return is_numeric($value) ? (int) $value : null;
     }
 
     private function previewBrandCode(?Brand $brand): string

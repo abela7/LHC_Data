@@ -15,8 +15,11 @@ class ProductFamily extends Model
     protected function casts(): array
     {
         return [
+            'brand_id' => 'integer',
+            'brand_catalogue_style_id' => 'integer',
             'published_at' => 'datetime',
             'sort_order' => 'integer',
+            'sku_family_seq' => 'integer',
         ];
     }
 
