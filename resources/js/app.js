@@ -77,9 +77,12 @@ const firstLaravelError = (payload) => {
     return errors[0] || '';
 };
 
-const uploadFailureMessage = (response, payload, fallback = 'Unable to save image.') => {
+const uploadFailureMessage = (response, payload, fallback = 'Unable to save image.', requestUrl = '') => {
     const serverMessage = firstLaravelError(payload);
     if (serverMessage) return serverMessage;
+
+    const url = requestUrl || response.url || '';
+    const urlHint = url ? ` Upload URL: ${url}` : '';
 
     if (response.status === 413) {
         return 'The photo is too large for the server upload limit. Try a smaller photo or increase upload limits on cPanel.';
@@ -89,16 +92,20 @@ const uploadFailureMessage = (response, payload, fallback = 'Unable to save imag
         return 'Your page session expired. Refresh the page, then try the photo again.';
     }
 
+    if (response.status === 404) {
+        return `${fallback} Server returned HTTP 404, so the upload route or selected product was not found.${urlHint}`;
+    }
+
     if (response.status >= 500) {
         return 'The server failed while saving the image. Check storage/logs/laravel.log and the cPanel error log.';
     }
 
     const text = String(payload?._text || '').replace(/\s+/g, ' ').trim();
     if (text) {
-        return `${fallback} Server returned HTTP ${response.status}: ${text.slice(0, 180)}`;
+        return `${fallback} Server returned HTTP ${response.status}: ${text.slice(0, 180)}${urlHint}`;
     }
 
-    return `${fallback} Server returned HTTP ${response.status}.`;
+    return `${fallback} Server returned HTTP ${response.status}.${urlHint}`;
 };
 
 const selectedMediaUploadFile = (cameraInput, uploadInput) => {
@@ -375,7 +382,7 @@ const initPicturePreviewModal = () => {
             });
             const data = await jsonResponseOrText(response);
             if (!response.ok) {
-                throw new Error(uploadFailureMessage(response, data, 'Unable to replace image.'));
+                throw new Error(uploadFailureMessage(response, data, 'Unable to replace image.', replaceForm.action));
             }
 
             setStatus('Image replaced.');
@@ -2273,7 +2280,7 @@ const initRetailMediaManagers = () => {
                 });
                 const data = await jsonResponseOrText(response);
                 if (!response.ok) {
-                    throw new Error(uploadFailureMessage(response, data, 'Unable to add image.'));
+                    throw new Error(uploadFailureMessage(response, data, 'Unable to add image.', form.action));
                 }
 
                 if (window.LHCStyleWorkspace?.refreshAfterImageChange) {
@@ -2336,7 +2343,7 @@ const initRetailMediaManagers = () => {
                     });
                     const data = await jsonResponseOrText(response);
                     if (!response.ok) {
-                        throw new Error(uploadFailureMessage(response, data, 'Unable to upload pasted image.'));
+                        throw new Error(uploadFailureMessage(response, data, 'Unable to upload pasted image.', form.action));
                     }
                     setStatus('Saved.');
                     if (window.LHCStyleWorkspace?.refreshAfterImageChange) {
@@ -3700,14 +3707,19 @@ const initRetailFamilyManager = () => {
         setQuickImageStatus('Saving image...');
 
         try {
-            const response = await fetch(quickImageForm.action, {
+            const uploadUrl = quickImageForm.action || '';
+            if (!uploadUrl || uploadUrl.endsWith('#')) {
+                throw new Error('Unable to save image. The upload URL is missing. Close the image panel, reopen this SKU, then try again.');
+            }
+
+            const response = await fetch(uploadUrl, {
                 method: 'POST',
                 body: payload,
                 headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
             });
             const data = await jsonResponseOrText(response);
             if (!response.ok) {
-                throw new Error(uploadFailureMessage(response, data, 'Unable to save image.'));
+                throw new Error(uploadFailureMessage(response, data, 'Unable to save image.', uploadUrl));
             }
 
             quickImageCompletedRoles.add(currentRole);
