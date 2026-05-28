@@ -119,7 +119,7 @@ class RetailProductMediaController extends Controller
             'usage_context' => ['required', Rule::in(self::USAGE_CONTEXTS)],
             'source_label' => ['nullable', 'string', 'max:255'],
             'external_url' => ['nullable', 'url', 'max:2000'],
-            'uploaded_image' => ['nullable', 'image', 'max:'.self::MAX_IMAGE_KB],
+            'uploaded_image' => ['nullable', 'file', 'max:'.self::MAX_IMAGE_KB],
             'notes' => ['nullable', 'string', 'max:2000'],
             'mirror_external' => ['nullable', 'boolean'],
             'paste_upload' => ['nullable', 'boolean'],
@@ -227,7 +227,7 @@ class RetailProductMediaController extends Controller
             'source_label' => ['nullable', 'string', 'max:255'],
             'alt_text' => ['nullable', 'string', 'max:255'],
             'external_url' => ['nullable', 'url', 'max:2000'],
-            'uploaded_image' => ['nullable', 'image', 'max:'.self::MAX_IMAGE_KB],
+            'uploaded_image' => ['nullable', 'file', 'max:'.self::MAX_IMAGE_KB],
             'notes' => ['nullable', 'string', 'max:2000'],
             'is_primary' => ['nullable', 'boolean'],
             'mirror_external' => ['nullable', 'boolean'],
@@ -423,11 +423,33 @@ class RetailProductMediaController extends Controller
      */
     private function storeUploadedFile(mixed $file, string $directory, bool $isPaste, string $imageName, bool $applyWatermark = true): array
     {
-        $extension = $file->guessExtension() ?: $file->extension() ?: 'png';
+        [$sourcePath, $mimeType, $temporaryPath] = $this->prepareUploadedImageSource($file);
+        $extension = ProductImageNamer::extensionFromMime($mimeType);
         $filename = ProductImageNamer::uniqueFilename($directory, $imageName, $extension);
-        $path = $file->storeAs($directory, $filename, 'public');
-        if ($applyWatermark) {
-            $this->applyWatermarkOrFail($path, 'uploaded_image');
+        $path = $directory.'/'.$filename;
+
+        try {
+            if ($temporaryPath === null) {
+                $path = $file->storeAs($directory, $filename, 'public');
+            } else {
+                $contents = @file_get_contents($sourcePath);
+                if ($contents === false) {
+                    throw ValidationException::withMessages([
+                        'uploaded_image' => 'The uploaded image could not be prepared for saving.',
+                    ]);
+                }
+
+                Storage::disk('public')->makeDirectory($directory);
+                Storage::disk('public')->put($path, $contents);
+            }
+
+            if ($applyWatermark) {
+                $this->applyWatermarkOrFail($path, 'uploaded_image');
+            }
+        } finally {
+            if ($temporaryPath !== null && is_file($temporaryPath)) {
+                @unlink($temporaryPath);
+            }
         }
 
         return [
@@ -435,10 +457,88 @@ class RetailProductMediaController extends Controller
             'storage_disk' => 'public',
             'storage_path' => $path,
             'original_filename' => $filename,
-            'mime_type' => Storage::disk('public')->mimeType($path) ?: $file->getClientMimeType(),
+            'mime_type' => Storage::disk('public')->mimeType($path) ?: $mimeType,
             'file_size' => Storage::disk('public')->size($path),
             'is_offline_ready' => true,
         ];
+    }
+
+    /**
+     * @return array{0:string,1:string,2:?string}
+     */
+    private function prepareUploadedImageSource(mixed $file): array
+    {
+        $path = $file->getRealPath();
+        if (! is_string($path) || $path === '' || ! is_file($path)) {
+            throw ValidationException::withMessages([
+                'uploaded_image' => 'The uploaded image could not be read by the server.',
+            ]);
+        }
+
+        $imageInfo = @getimagesize($path);
+        $mimeType = strtolower((string) ($imageInfo['mime'] ?? ''));
+        if ($imageInfo && str_starts_with($mimeType, 'image/')) {
+            return [$path, $mimeType, null];
+        }
+
+        $convertedPath = $this->convertUploadedImageToJpeg($path);
+        if ($convertedPath !== null) {
+            return [$convertedPath, 'image/jpeg', $convertedPath];
+        }
+
+        $clientMime = strtolower((string) ($file->getClientMimeType() ?: $file->getMimeType()));
+        $extension = strtolower((string) $file->getClientOriginalExtension());
+        $looksLikeHeic = in_array($extension, ['heic', 'heif'], true)
+            || in_array($clientMime, ['image/heic', 'image/heif', 'image/heic-sequence', 'image/heif-sequence'], true);
+
+        throw ValidationException::withMessages([
+            'uploaded_image' => $looksLikeHeic
+                ? 'This phone photo is HEIC/HEIF and the server could not convert it. Change the phone camera format to JPEG/Most Compatible and try again.'
+                : 'The uploaded file is not a readable image. Use JPEG, PNG, WebP, or GIF.',
+        ]);
+    }
+
+    private function convertUploadedImageToJpeg(string $path): ?string
+    {
+        if (! class_exists(\Imagick::class)) {
+            return null;
+        }
+
+        $temporaryPath = tempnam(sys_get_temp_dir(), 'lhc-upload-');
+        if ($temporaryPath === false) {
+            return null;
+        }
+
+        try {
+            $image = new \Imagick();
+            $image->readImage($path);
+            if ($image->getNumberImages() > 1) {
+                $image->setIteratorIndex(0);
+            }
+
+            $image->setImageBackgroundColor('white');
+            if ($image->getImageAlphaChannel()) {
+                $image = $image->mergeImageLayers(\Imagick::LAYERMETHOD_FLATTEN);
+            }
+            $image->setImageFormat('jpeg');
+            $image->setImageCompressionQuality(88);
+            $image->writeImage($temporaryPath);
+            $image->clear();
+            $image->destroy();
+
+            $imageInfo = @getimagesize($temporaryPath);
+            if (! $imageInfo || ! str_starts_with(strtolower((string) ($imageInfo['mime'] ?? '')), 'image/')) {
+                @unlink($temporaryPath);
+
+                return null;
+            }
+
+            return $temporaryPath;
+        } catch (Throwable) {
+            @unlink($temporaryPath);
+
+            return null;
+        }
     }
 
     /**
