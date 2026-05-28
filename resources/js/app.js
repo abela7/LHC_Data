@@ -1,5 +1,75 @@
 import './bootstrap';
 
+const normalizeImageUploadFile = async (file, maxDimension = 2200, quality = 0.88) => {
+    if (!file || !file.type?.startsWith('image/') || file.type === 'image/gif') {
+        return file;
+    }
+
+    const objectUrl = URL.createObjectURL(file);
+
+    try {
+        const image = new Image();
+        image.decoding = 'async';
+        await new Promise((resolve, reject) => {
+            image.onload = resolve;
+            image.onerror = () => reject(new Error('Unable to prepare this image for upload.'));
+            image.src = objectUrl;
+        });
+
+        const sourceWidth = image.naturalWidth || image.width;
+        const sourceHeight = image.naturalHeight || image.height;
+        if (!sourceWidth || !sourceHeight) {
+            return file;
+        }
+
+        const scale = Math.min(1, maxDimension / Math.max(sourceWidth, sourceHeight));
+        const width = Math.max(1, Math.round(sourceWidth * scale));
+        const height = Math.max(1, Math.round(sourceHeight * scale));
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+
+        const context = canvas.getContext('2d', { alpha: false });
+        if (!context) {
+            return file;
+        }
+
+        context.fillStyle = '#ffffff';
+        context.fillRect(0, 0, width, height);
+        context.drawImage(image, 0, 0, width, height);
+
+        const blob = await new Promise((resolve) => {
+            canvas.toBlob(resolve, 'image/jpeg', quality);
+        });
+
+        if (!blob || blob.size <= 0) {
+            return file;
+        }
+
+        const originalBase = (file.name || 'product-photo').replace(/\.[^.]+$/, '');
+        return new File([blob], `${originalBase}.jpg`, {
+            type: 'image/jpeg',
+            lastModified: Date.now(),
+        });
+    } catch (_) {
+        return file;
+    } finally {
+        URL.revokeObjectURL(objectUrl);
+    }
+};
+
+const selectedMediaUploadFile = (cameraInput, uploadInput) => {
+    if (cameraInput?.files?.length) {
+        return cameraInput.files[0];
+    }
+
+    if (uploadInput?.files?.length) {
+        return uploadInput.files[0];
+    }
+
+    return null;
+};
+
 const initBrandCarousels = () => {
     document.querySelectorAll('[data-brand-carousel]').forEach((modal) => {
         const slides = Array.from(modal.querySelectorAll('[data-carousel-slide]'));
@@ -244,11 +314,14 @@ const initPicturePreviewModal = () => {
             submitButton?.setAttribute('disabled', 'disabled');
             setStatus('Replacing image...');
 
-            const payload = new FormData(replaceForm);
             const cameraInput = replaceForm.querySelector('[data-rfm-camera]');
             const uploadInput = replaceForm.querySelector('[data-rfm-upload]');
-            if ((!cameraInput?.files?.length) && uploadInput?.files?.length) {
-                payload.set('uploaded_image', uploadInput.files[0], uploadInput.files[0].name);
+            const uploadFile = selectedMediaUploadFile(cameraInput, uploadInput);
+            const payload = new FormData(replaceForm);
+            if (uploadFile) {
+                setStatus('Preparing image...');
+                const preparedFile = await normalizeImageUploadFile(uploadFile);
+                payload.set('uploaded_image', preparedFile, preparedFile.name || uploadFile.name);
             }
             payload.delete('uploaded_image_alt');
 
@@ -1780,11 +1853,16 @@ const initStyleWorkspaceAjaxV2 = () => {
         }
 
         try {
-            const payload = new FormData(form);
             const cameraInput = form.querySelector('[data-rfm-camera]');
             const uploadInput = form.querySelector('[data-rfm-upload]');
-            if ((!cameraInput?.files?.length) && uploadInput?.files?.length) {
-                payload.set('uploaded_image', uploadInput.files[0], uploadInput.files[0].name);
+            const uploadFile = selectedMediaUploadFile(cameraInput, uploadInput);
+            const payload = new FormData(form);
+            if (uploadFile) {
+                if (submitButton && !submitButton.classList.contains('sw-opt-summary-del-btn')) {
+                    submitButton.textContent = 'Preparing image...';
+                }
+                const preparedFile = await normalizeImageUploadFile(uploadFile);
+                payload.set('uploaded_image', preparedFile, preparedFile.name || uploadFile.name);
             }
             payload.delete('uploaded_image_alt');
 
@@ -2115,6 +2193,63 @@ const initRetailMediaManagers = () => {
             }
         });
 
+        form.addEventListener('submit', async (event) => {
+            if (form.matches('[data-rfm-quick-image-form], [data-picture-preview-replace-form]')) {
+                return;
+            }
+
+            event.preventDefault();
+            event.stopPropagation();
+
+            const submitButton = form.querySelector('button[type="submit"]');
+            const originalLabel = submitButton?.textContent || 'Add image';
+            const cameraInput = form.querySelector('[data-rfm-camera]');
+            const uploadInput = form.querySelector('[data-rfm-upload]');
+            const uploadFile = selectedMediaUploadFile(cameraInput, uploadInput);
+            const payload = new FormData(form);
+
+            try {
+                if (submitButton) {
+                    submitButton.disabled = true;
+                    submitButton.textContent = uploadFile ? 'Preparing image...' : 'Saving...';
+                }
+
+                if (uploadFile) {
+                    const preparedFile = await normalizeImageUploadFile(uploadFile);
+                    payload.set('uploaded_image', preparedFile, preparedFile.name || uploadFile.name);
+                }
+                payload.delete('uploaded_image_alt');
+
+                if (submitButton && uploadFile) {
+                    submitButton.textContent = 'Uploading...';
+                }
+
+                const response = await fetch(form.action, {
+                    method: 'POST',
+                    body: payload,
+                    headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                });
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok) {
+                    const message = data.message || Object.values(data.errors || {}).flat()[0] || 'Unable to add image.';
+                    throw new Error(message);
+                }
+
+                if (window.LHCStyleWorkspace?.refreshAfterImageChange) {
+                    await window.LHCStyleWorkspace.refreshAfterImageChange();
+                } else {
+                    window.location.reload();
+                }
+            } catch (error) {
+                window.alert(error.message || 'Unable to add image.');
+            } finally {
+                if (submitButton) {
+                    submitButton.disabled = false;
+                    submitButton.textContent = originalLabel;
+                }
+            }
+        });
+
         if (pasteZone) {
             const setStatus = (message, isError = false) => {
                 if (!status) return;
@@ -2146,8 +2281,9 @@ const initRetailMediaManagers = () => {
                 setStatus('Uploading pasted image…');
 
                 try {
+                    const preparedFile = await normalizeImageUploadFile(file);
                     const payload = new FormData(form);
-                    payload.set('uploaded_image', file, file.name || `pasted-${Date.now()}.png`);
+                    payload.set('uploaded_image', preparedFile, preparedFile.name || file.name || `pasted-${Date.now()}.jpg`);
                     payload.set('paste_upload', '1');
                     payload.delete('external_url');
                     payload.delete('uploaded_image_alt');
@@ -3504,18 +3640,24 @@ const initRetailFamilyManager = () => {
             quickImageUsageHidden.value = quickImageUsagePicker.value || quickImageUsageHidden.value || 'all';
         }
 
-        const payload = new FormData(quickImageForm);
-        if ((!cameraInput?.files?.length) && uploadInput?.files?.length) {
-            payload.set('uploaded_image', uploadInput.files[0], uploadInput.files[0].name);
-        }
-        payload.delete('uploaded_image_alt');
-
         if (submitButton) {
             submitButton.disabled = true;
             submitButton.textContent = 'Saving...';
         }
-        setQuickImageStatus('Saving image...');
         let savedSuccessfully = false;
+
+        const uploadFile = selectedMediaUploadFile(cameraInput, uploadInput);
+        const payload = new FormData(quickImageForm);
+        if (uploadFile) {
+            if (submitButton) submitButton.textContent = 'Preparing image...';
+            setQuickImageStatus('Preparing image...');
+            const preparedFile = await normalizeImageUploadFile(uploadFile);
+            payload.set('uploaded_image', preparedFile, preparedFile.name || uploadFile.name);
+        }
+        payload.delete('uploaded_image_alt');
+
+        if (submitButton) submitButton.textContent = 'Saving...';
+        setQuickImageStatus('Saving image...');
 
         try {
             const response = await fetch(quickImageForm.action, {
