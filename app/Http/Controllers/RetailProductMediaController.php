@@ -50,9 +50,19 @@ class RetailProductMediaController extends Controller
         return $this->store($request, $family, null);
     }
 
-    public function storeProduct(Request $request, Product $product): RedirectResponse|JsonResponse
+    public function storeProduct(Request $request, $product): RedirectResponse|JsonResponse
     {
-        return $this->store($request, $product->family()->firstOrFail(), $product);
+        $productId = filter_var($product, FILTER_VALIDATE_INT);
+        if ($productId === false) {
+            return $this->missingProductResponse($request, (string) $product);
+        }
+
+        $productModel = Product::query()->with('family')->find((int) $productId);
+        if (! $productModel || ! $productModel->family) {
+            return $this->missingProductResponse($request, (string) $product);
+        }
+
+        return $this->store($request, $productModel->family, $productModel);
     }
 
     public function update(Request $request, ProductMedia $media): RedirectResponse
@@ -333,6 +343,17 @@ class RetailProductMediaController extends Controller
         }
 
         return back()->with('status', 'Image added.');
+    }
+
+    private function missingProductResponse(Request $request, string $productId): RedirectResponse|JsonResponse
+    {
+        $message = "The selected SKU {$productId} was not found on the server. Refresh the family page, then try again.";
+
+        if ($request->expectsJson()) {
+            return response()->json(['message' => $message], 404);
+        }
+
+        abort(404, $message);
     }
 
     /**
