@@ -44,7 +44,7 @@ final class RetailFamilySkuGrouper
         $groupingGroup = self::resolveGroupingGroup($family, $products, $allVariantValues, $sharedGroupIds);
 
         $familyCommonLabels = $family->variantGroups
-            ->sortBy('sort_order')
+            ->sortBy(fn (ProductVariantGroup $group): string => VariantNaturalSort::groupKey($group))
             ->filter(fn (ProductVariantGroup $group): bool => $sharedGroupIds->has($group->id))
             ->map(function (ProductVariantGroup $group) use ($allVariantValues): ?string {
                 $match = $allVariantValues->where('product_variant_group_id', $group->id)->first();
@@ -67,7 +67,7 @@ final class RetailFamilySkuGrouper
                     $skuGroups->put($groupKey, [
                         'label' => $groupLabel,
                         'sort_order' => (int) ($option?->sort_order ?? 9999),
-                        'sort_key' => self::lengthSortKey($groupLabel),
+                        'sort_key' => VariantNaturalSort::valueKey($groupLabel),
                         'products' => collect(),
                     ]);
                 }
@@ -76,6 +76,13 @@ final class RetailFamilySkuGrouper
             }
 
             $skuGroups = $skuGroups
+                ->map(function (array $group) use ($family): array {
+                    $group['products'] = $group['products']
+                        ->sortBy(fn (Product $product): string => VariantNaturalSort::productKey($product, $family->variantGroups))
+                        ->values();
+
+                    return $group;
+                })
                 ->sortBy(fn (array $group): array => [$group['sort_key'], $group['sort_order']])
                 ->values();
         } else {
@@ -83,7 +90,9 @@ final class RetailFamilySkuGrouper
                 'label' => $family->family_name,
                 'sort_order' => 0,
                 'sort_key' => '0',
-                'products' => $products,
+                'products' => $products
+                    ->sortBy(fn (Product $product): string => VariantNaturalSort::productKey($product, $family->variantGroups))
+                    ->values(),
             ]]);
         }
 
@@ -202,12 +211,4 @@ final class RetailFamilySkuGrouper
             ->count();
     }
 
-    private static function lengthSortKey(string $label): string
-    {
-        if (preg_match('/(\d+(?:\.\d+)?)/', $label, $matches)) {
-            return str_pad((string) ((int) round((float) $matches[1] * 100)), 8, '0', STR_PAD_LEFT);
-        }
-
-        return 'z'.Str::lower($label);
-    }
 }

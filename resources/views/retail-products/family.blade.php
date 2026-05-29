@@ -5,6 +5,7 @@
 @section('heading', $family->display_family_name)
 
 @php
+    use App\Support\VariantNaturalSort;
     use Illuminate\Support\Str;
 
     $primaryFamilyMedia = $family->media->firstWhere('is_primary', true) ?? $family->media->first();
@@ -61,7 +62,7 @@
 
     $ecomPreviewSkus = $products->map(function ($product) use ($family, $ecomPreviewMediaItem) {
         $labels = $product->variantValues
-            ->sortBy(fn ($v) => sprintf('%04d:%s', $v->group?->sort_order ?? 0, $v->option?->label ?? ''))
+            ->sortBy(fn ($v) => sprintf('%s:%s', $v->group ? VariantNaturalSort::groupKey($v->group) : '9999', VariantNaturalSort::valueKey($v->option?->label)))
             ->map(fn ($v) => $v->option?->label)
             ->filter()
             ->values();
@@ -1079,7 +1080,7 @@
                         $isOnline = (bool) $product->is_ecommerce_active;
                         $isInventoryTracked = (bool) $product->is_inventory_tracked;
                         $optionText = $product->variantValues
-                            ->sortBy(fn ($v) => sprintf('%04d:%s', $v->group->sort_order, $v->option->label))
+                            ->sortBy(fn ($v) => sprintf('%s:%s', VariantNaturalSort::groupKey($v->group), VariantNaturalSort::valueKey($v->option?->label)))
                             ->map(fn ($v) => ['group' => $v->group->name, 'label' => $v->option->label, 'group_id' => $v->group->id]);
                         $displayOptionText = $groupingGroup
                             ? $optionText->reject(fn ($v) => $v['group_id'] === $groupingGroup->id)
@@ -1577,7 +1578,7 @@
                                         @foreach ($products as $duplicateProduct)
                                             @php
                                                 $duplicateOptions = $duplicateProduct->variantValues
-                                                    ->sortBy(fn ($v) => sprintf('%04d:%s', $v->group?->sort_order ?? 0, $v->option?->label ?? ''))
+                                                    ->sortBy(fn ($v) => sprintf('%s:%s', $v->group ? VariantNaturalSort::groupKey($v->group) : '9999', VariantNaturalSort::valueKey($v->option?->label)))
                                                     ->map(fn ($v) => $v->option?->label)
                                                     ->filter()
                                                     ->implode(' / ');

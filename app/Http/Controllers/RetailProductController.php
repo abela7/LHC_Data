@@ -24,6 +24,7 @@ use App\Services\SkuCodeAllocator;
 use App\Support\CustomerProductDescription;
 use App\Support\HairExtensionLengthLabel;
 use App\Support\RetailFamilySkuGrouper;
+use App\Support\VariantNaturalSort;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -229,7 +230,7 @@ class RetailProductController extends Controller
             ?? $familyMedia->first();
         $stockQuantity = (float) $product->inventoryLevels->sum('stock_quantity');
         $variantValues = $product->variantValues
-            ->sortBy(fn ($value) => sprintf('%04d:%s', $value->group?->sort_order ?? 0, $value->option?->label ?? ''))
+            ->sortBy(fn ($value) => sprintf('%s:%s', $value->group ? VariantNaturalSort::groupKey($value->group) : '9999', VariantNaturalSort::valueKey($value->option?->label)))
             ->values();
 
         return view('retail-products.product', [
@@ -267,6 +268,7 @@ class RetailProductController extends Controller
             'products.variantValues.option',
             'products.catalogueSku.style.productType.line',
         ]);
+        $this->normalizeFamilyVariantOrder($family);
 
         $products = $family->products;
         $pricedCount = $products->filter(fn (Product $product): bool => $product->price?->retail_price !== null)->count();
@@ -3234,6 +3236,40 @@ class RetailProductController extends Controller
                 'sort_order' => 0,
             ],
         );
+    }
+
+    private function normalizeFamilyVariantOrder(ProductFamily $family): void
+    {
+        $groups = VariantNaturalSort::sortGroups($family->variantGroups);
+        $groups->each(function (ProductVariantGroup $group): void {
+            if ($group->relationLoaded('options')) {
+                $group->setRelation('options', VariantNaturalSort::sortOptions($group->options));
+            }
+        });
+
+        $family->setRelation('variantGroups', $groups);
+        $groupOrder = $groups
+            ->values()
+            ->mapWithKeys(fn (ProductVariantGroup $group, int $index): array => [(int) $group->id => $index]);
+
+        $products = $family->products
+            ->map(function (Product $product) use ($groupOrder): Product {
+                if ($product->relationLoaded('variantValues')) {
+                    $product->setRelation('variantValues', $product->variantValues
+                        ->sortBy(fn (ProductVariantValue $value): string => sprintf(
+                            '%04d:%s',
+                            (int) $groupOrder->get((int) $value->product_variant_group_id, 9999),
+                            VariantNaturalSort::valueKey($value->option?->label),
+                        ))
+                        ->values());
+                }
+
+                return $product;
+            })
+            ->sortBy(fn (Product $product): string => VariantNaturalSort::productKey($product, $groups))
+            ->values();
+
+        $family->setRelation('products', $products);
     }
 
     private function nullTrim(?string $value): ?string

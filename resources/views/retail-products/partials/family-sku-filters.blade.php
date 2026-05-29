@@ -1,12 +1,14 @@
 @php
+    use App\Support\VariantNaturalSort;
+
     $skuFilterVariantGroups = $family->variantGroups
-        ->sortBy('sort_order')
+        ->sortBy(fn ($group) => VariantNaturalSort::groupKey($group))
         ->map(function ($group) use ($products) {
             return [
                 'id' => $group->id,
                 'name' => $group->name,
                 'options' => $group->options
-                    ->sortBy('sort_order')
+                    ->sortBy(fn ($option) => VariantNaturalSort::valueKey($option->label))
                     ->map(function ($option) use ($products) {
                         $count = $products->filter(
                             fn ($product) => $product->variantValues->contains(
