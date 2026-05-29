@@ -227,7 +227,7 @@ class RetailProductMediaController extends Controller
 
     private function store(Request $request, ProductFamily $family, ?Product $product): RedirectResponse|JsonResponse
     {
-        if ($product && $product->product_family_id !== $family->id) {
+        if ($product && (int) $product->product_family_id !== (int) $family->id) {
             abort(404);
         }
 
