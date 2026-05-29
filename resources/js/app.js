@@ -3407,6 +3407,11 @@ const initRetailFamilyManager = () => {
         };
     };
 
+    const persistQuickImageTargetsToTrigger = () => {
+        if (!quickImageTrigger) return;
+        quickImageTrigger.dataset.rfmQuickImageTargets = JSON.stringify(quickImageTargets || {});
+    };
+
     const roleShouldReplaceSingleImage = (role) => ['main', 'variant'].includes(role);
 
     const roleDisplayName = (role) => {
@@ -3746,6 +3751,7 @@ const initRetailFamilyManager = () => {
                 if (media.mobile_target_type) roleTarget.mobileTargetType = media.mobile_target_type;
                 if (media.mobile_target_id) roleTarget.mobileTargetId = media.mobile_target_id;
                 quickImageTargets[currentRole] = roleTarget;
+                persistQuickImageTargetsToTrigger();
 
                 if (roleShouldReplaceSingleImage(currentRole)) {
                     updateQuickImageCurrentPreview(media.url);
@@ -3759,11 +3765,12 @@ const initRetailFamilyManager = () => {
             const nextRole = QUICK_IMAGE_AUTO_SEQUENCE[currentRole];
             let nextRoleLabel = currentRoleLabel;
             resetQuickImageInputsAfterSave();
+            syncQuickImageRoleUi(currentRole);
+            syncQuickImageTarget(currentRole);
 
-            if (nextRole) {
+            if (nextRole && nextRole !== currentRole) {
                 const nextOption = quickImageRoleSelect?.querySelector(`option[value="${nextRole}"]`);
                 nextRoleLabel = nextOption?.textContent?.trim() || nextRole;
-                setQuickImageRole(nextRole);
             }
 
             setQuickImageStatus(
@@ -3771,6 +3778,10 @@ const initRetailFamilyManager = () => {
                     ? `Saved as ${currentRoleLabel}. Next: ${nextRoleLabel} — add another photo or close.`
                     : `Saved as ${currentRoleLabel}. Add another or close when done.`,
             );
+
+            if (nextRole && nextRole !== currentRole) {
+                setQuickImageStatus(`Saved as ${currentRoleLabel}. Next: ${nextRoleLabel} when ready.`);
+            }
 
             const activePanel = quickImageForm.querySelector('.rfm-media-tab-panel.is-active');
             activePanel?.querySelector('input, textarea, button')?.focus();
