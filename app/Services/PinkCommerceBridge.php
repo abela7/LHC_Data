@@ -104,20 +104,20 @@ class PinkCommerceBridge
                 }
             }
 
-            // Only push sellable, complete products: must have SKU + barcode + non-zero price.
-            // Drafts/incomplete records stay local until they're finished.
-            $code = $product->sku;
-            $barcode = $product->barcode;
-            $price = $product->price?->retail_price;
-            if (! $code || ! $barcode || $price === null || (float) $price <= 0) {
+            // Mirror everything that has a SKU code (or barcode as fallback). Incomplete
+            // fields (null barcode, missing price) are passed through as null/0 so the
+            // Railway DB progressively reflects whatever state his app has — barcode and
+            // price get filled in on later edits/republishes and update upserts cleanly.
+            $code = $product->sku ?: $product->barcode;
+            if (! $code) {
                 continue;
             }
 
             $skus[] = [
                 'combination' => $combination,
                 'code' => (string) $code,
-                'productBarcode' => (string) $barcode,
-                'price' => (float) $price,
+                'productBarcode' => $product->barcode ? (string) $product->barcode : null,
+                'price' => $product->price ? (float) $product->price->retail_price : 0,
             ];
         }
 
