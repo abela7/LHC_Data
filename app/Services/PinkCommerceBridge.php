@@ -104,17 +104,20 @@ class PinkCommerceBridge
                 }
             }
 
-            // A globally-unique, stable SKU code is required by the API.
-            $code = $product->sku ?: $product->barcode;
-            if (! $code) {
+            // Only push sellable, complete products: must have SKU + barcode + non-zero price.
+            // Drafts/incomplete records stay local until they're finished.
+            $code = $product->sku;
+            $barcode = $product->barcode;
+            $price = $product->price?->retail_price;
+            if (! $code || ! $barcode || $price === null || (float) $price <= 0) {
                 continue;
             }
 
             $skus[] = [
                 'combination' => $combination,
                 'code' => (string) $code,
-                'productBarcode' => $product->barcode ? (string) $product->barcode : null,
-                'price' => $product->price ? (float) $product->price->retail_price : 0,
+                'productBarcode' => (string) $barcode,
+                'price' => (float) $price,
             ];
         }
 
