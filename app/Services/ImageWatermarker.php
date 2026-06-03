@@ -85,7 +85,7 @@ class ImageWatermarker
                 $logoHeight
             );
 
-            imagecopy($image, $logo, $x, $y, 0, 0, $logoWidth, $logoHeight);
+            $this->copyLayerOntoImage($image, $logo, $x, $y);
             imagedestroy($logo);
             $changed = true;
         }
@@ -104,7 +104,7 @@ class ImageWatermarker
                 $watermarkHeight = imagesy($watermark);
                 [$x, $y] = $this->coordinates($settings, $width, $height, $watermarkWidth, $watermarkHeight);
 
-                imagecopy($image, $watermark, $x, $y, 0, 0, $watermarkWidth, $watermarkHeight);
+                $this->copyLayerOntoImage($image, $watermark, $x, $y);
                 imagedestroy($watermark);
                 $changed = true;
             }
@@ -176,11 +176,11 @@ class ImageWatermarker
         $maxWidth = max(32, (int) round($imageWidth * (max(20, min(100, (int) ($settings->max_width_percent ?? 90))) / 100)));
         $padding = max(0, (int) round(min($imageWidth, $imageHeight) * (max(0, min(8, (int) ($settings->background_padding_percent ?? 2))) / 100)));
 
-        if ($fontPath && function_exists('imagettftext')) {
+        if ($fontPath !== null && function_exists('imagettftext')) {
             return $this->buildTrueTypeLayer($settings, $text, $fontPath, $imageWidth, $imageHeight, $maxWidth, $padding);
         }
 
-        return $this->buildBasicTextLayer($settings, $text, $maxWidth, $padding);
+        return $this->buildScaledBitmapTextLayer($settings, $text, $imageWidth, $imageHeight, $maxWidth, $padding);
     }
 
     private function buildTrueTypeLayer(WatermarkSetting $settings, string $text, string $fontPath, int $imageWidth, int $imageHeight, int $maxWidth, int $padding): mixed
@@ -230,25 +230,54 @@ class ImageWatermarker
         return $canvas;
     }
 
-    private function buildBasicTextLayer(WatermarkSetting $settings, string $text, int $maxWidth, int $padding): mixed
-    {
+    /**
+     * Fallback when TrueType fonts are unavailable — scale bitmap text to match text_size_percent.
+     */
+    private function buildScaledBitmapTextLayer(
+        WatermarkSetting $settings,
+        string $text,
+        int $imageWidth,
+        int $imageHeight,
+        int $maxWidth,
+        int $padding,
+    ): mixed {
         $font = 5;
-        $textWidth = min($maxWidth, imagefontwidth($font) * strlen($text));
-        $textHeight = imagefontheight($font);
-        $shadowOffset = $this->shadowOpacity($settings) > 0 ? 1 : 0;
-        $canvas = $this->transparentCanvas($textWidth + ($padding * 2) + $shadowOffset, $textHeight + ($padding * 2) + $shadowOffset);
+        $sizePercent = max(2, min(16, (int) ($settings->text_size_percent ?? 6)));
+        $targetFontSize = max(12, min(160, (int) round(min($imageWidth, $imageHeight) * ($sizePercent / 100))));
+        $scale = max(1, (int) round($targetFontSize / max(1, imagefontheight($font))));
 
-        $this->drawBackgroundPlate($canvas, $settings, imagesx($canvas), imagesy($canvas));
+        $baseWidth = min($maxWidth, imagefontwidth($font) * strlen($text));
+        $baseHeight = imagefontheight($font);
+        $shadowOffset = $this->shadowOpacity($settings) > 0 ? max(1, (int) round($scale * 0.15)) : 0;
+        $canvasWidth = ($baseWidth * $scale) + ($padding * 2) + $shadowOffset;
+        $canvasHeight = ($baseHeight * $scale) + ($padding * 2) + $shadowOffset;
+        $canvas = $this->transparentCanvas($canvasWidth, $canvasHeight);
 
+        $this->drawBackgroundPlate($canvas, $settings, $canvasWidth, $canvasHeight);
+
+        $scratch = $this->transparentCanvas($baseWidth, $baseHeight);
         [$red, $green, $blue] = $this->hexToRgb($settings->text_color);
-        $textColor = imagecolorallocatealpha($canvas, $red, $green, $blue, $this->alpha((int) $settings->opacity));
-        $shadowColor = imagecolorallocatealpha($canvas, 0, 0, 0, $this->alpha($this->shadowOpacity($settings)));
+        $textColor = imagecolorallocatealpha($scratch, $red, $green, $blue, $this->alpha((int) $settings->opacity));
+        $shadowColor = imagecolorallocatealpha($scratch, 0, 0, 0, $this->alpha($this->shadowOpacity($settings)));
 
         if ($shadowOffset > 0) {
-            imagestring($canvas, $font, $padding + $shadowOffset, $padding + $shadowOffset, $text, $shadowColor);
+            imagestring($scratch, $font, 1, 1, $text, $shadowColor);
         }
 
-        imagestring($canvas, $font, $padding, $padding, $text, $textColor);
+        imagestring($scratch, $font, 0, 0, $text, $textColor);
+        imagecopyresampled(
+            $canvas,
+            $scratch,
+            $padding,
+            $padding,
+            0,
+            0,
+            $baseWidth * $scale,
+            $baseHeight * $scale,
+            $baseWidth,
+            $baseHeight,
+        );
+        imagedestroy($scratch);
 
         return $canvas;
     }
@@ -519,14 +548,49 @@ class ImageWatermarker
             'Courier New' => 'cour.ttf',
         ];
 
-        $file = $fontFiles[$fontFamily] ?? null;
-        if (! $file) {
-            return null;
+        $file = $fontFiles[$fontFamily] ?? 'arial.ttf';
+        $candidates = [
+            resource_path('fonts/'.$file),
+            'C:\\Windows\\Fonts\\'.$file,
+            '/usr/share/fonts/truetype/msttcorefonts/'.$file,
+            '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
+            '/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf',
+        ];
+
+        foreach ($candidates as $path) {
+            if (is_string($path) && $path !== '' && file_exists($path)) {
+                return $path;
+            }
         }
 
-        $windowsPath = 'C:\\Windows\\Fonts\\'.$file;
+        $arialBundled = resource_path('fonts/arial.ttf');
 
-        return file_exists($windowsPath) ? $windowsPath : null;
+        return file_exists($arialBundled) ? $arialBundled : null;
+    }
+
+    private function copyLayerOntoImage(mixed $image, mixed $layer, int $x, int $y): void
+    {
+        $layerWidth = imagesx($layer);
+        $layerHeight = imagesy($layer);
+        imagealphablending($image, true);
+        imagesavealpha($image, true);
+
+        for ($offsetX = 0; $offsetX < $layerWidth; $offsetX++) {
+            for ($offsetY = 0; $offsetY < $layerHeight; $offsetY++) {
+                $rgba = imagecolorat($layer, $offsetX, $offsetY);
+                $alpha = ($rgba & 0x7F000000) >> 24;
+
+                if ($alpha >= 127) {
+                    continue;
+                }
+
+                $red = ($rgba >> 16) & 0xFF;
+                $green = ($rgba >> 8) & 0xFF;
+                $blue = $rgba & 0xFF;
+                $color = imagecolorallocatealpha($image, $red, $green, $blue, $alpha);
+                imagesetpixel($image, $x + $offsetX, $y + $offsetY, $color);
+            }
+        }
     }
 
     private function alpha(int $opacity): int
