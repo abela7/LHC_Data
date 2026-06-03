@@ -211,6 +211,8 @@ Route::post('/retail-products/families/{family}/variant-options/create-skus-for-
 Route::patch('/retail-products/families/{family}/variant-options/{option}', [RetailProductController::class, 'updateFamilyVariantOption'])->name('retail-products.families.variant-options.update');
 Route::delete('/retail-products/families/{family}/variant-options/{option}', [RetailProductController::class, 'destroyFamilyVariantOption'])->name('retail-products.families.variant-options.destroy');
 Route::delete('/retail-products/families/{family}/variant-options/{option}/skus', [RetailProductController::class, 'destroyFamilySkusForVariantOption'])->name('retail-products.families.variant-options.skus.destroy');
+Route::post('/retail-products/families/{family}/variant-options/{option}/split-family', [RetailProductController::class, 'splitFamilyBucketToNewFamily'])->name('retail-products.families.variant-options.split-family');
+Route::post('/retail-products/families/{family}/split-families', [RetailProductController::class, 'splitFamilyAllBucketsToNewFamilies'])->name('retail-products.families.split-families');
 Route::post('/retail-products/families/{family}/ai-naming/suggest', [RetailProductController::class, 'suggestFamilyNaming'])->name('retail-products.families.ai-naming.suggest');
 Route::post('/retail-products/families/{family}/ai-description/suggest', [RetailProductController::class, 'suggestFamilyDescription'])->name('retail-products.families.ai-description.suggest');
 Route::patch('/retail-products/families/{family}/ai-naming/apply', [RetailProductController::class, 'applyFamilyNaming'])->name('retail-products.families.ai-naming.apply');

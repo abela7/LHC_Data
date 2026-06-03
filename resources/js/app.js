@@ -4542,6 +4542,14 @@ const initRetailFamilyManager = () => {
         }, true /* capture phase */);
     });
 
+    root.querySelectorAll('.rfm-sku-group-summary').forEach((summary) => {
+        summary.addEventListener('click', (event) => {
+            if (event.target.closest('[data-rfm-sku-bucket-delete], [data-rfm-sku-bucket-split-family]')) {
+                event.preventDefault();
+            }
+        }, true);
+    });
+
     root.querySelectorAll('[data-rfm-sku-delete]').forEach((btn) => {
         btn.addEventListener('click', async (event) => {
             event.preventDefault();
@@ -4592,6 +4600,61 @@ const initRetailFamilyManager = () => {
             } catch (error) {
                 btn.disabled = false;
                 showToast(error.message || 'Unable to delete SKU.', true);
+            }
+        });
+    });
+
+    root.querySelectorAll('[data-rfm-sku-bucket-split-family]').forEach((btn) => {
+        btn.addEventListener('click', async (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+
+            const axis = btn.dataset.rfmBucketAxis || 'Variant';
+            const label = btn.dataset.rfmBucketLabel || '';
+            const count = Number.parseInt(btn.dataset.rfmSkuCount || '0', 10) || 0;
+            const bucketLabel = label ? `${axis}: ${label}` : axis;
+            const skuWord = count === 1 ? 'SKU' : 'SKUs';
+            if (!window.confirm(
+                `Create a new product family for ${bucketLabel} and move all ${count} ${skuWord} into it?\n\n`
+                + 'The new family keeps the same brand, style, and name. '
+                + `${axis} is removed as a variant axis so remaining options (e.g. bundle size) stay on one family.`,
+            )) {
+                return;
+            }
+
+            const action = btn.dataset.rfmAction || '';
+            if (!action) {
+                return;
+            }
+
+            btn.disabled = true;
+
+            try {
+                const formData = new FormData();
+                formData.append('_token', csrf);
+
+                const response = await fetch(action, {
+                    method: 'POST',
+                    headers: {
+                        Accept: 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest',
+                    },
+                    body: formData,
+                });
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok) {
+                    throw new Error(data.message || 'Unable to create a new family for this group.');
+                }
+
+                if (data.redirect_url) {
+                    window.location.assign(data.redirect_url);
+                    return;
+                }
+
+                showToast(data.message || 'New family created.');
+            } catch (error) {
+                btn.disabled = false;
+                showToast(error.message || 'Unable to create a new family for this group.', true);
             }
         });
     });

@@ -11953,6 +11953,14 @@
 
     /* ── SKU groups (accordion by main variant) ── */
 
+    .rfm-sku-groups-split-all {
+        @apply inline;
+    }
+
+    .rfm-sku-groups-split-all-btn {
+        color: #2a5c8a;
+    }
+
     .rfm-sku-groups-toolbar {
         @apply mb-2 flex items-center justify-end gap-2;
     }
@@ -12043,23 +12051,38 @@
         color: var(--color-accent);
     }
 
+    .rfm-sku-group-new-family {
+        @apply shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-bold leading-none;
+        border-color: rgba(42, 92, 138, 0.22);
+        background: #f5f9ff;
+        color: #2a5c8a;
+    }
+
+    .rfm-sku-group-new-family:hover,
+    .rfm-sku-group-new-family:focus-visible {
+        border-color: #2a5c8a;
+        outline: none;
+    }
+
+    .rfm-sku-group-new-family:disabled {
+        @apply cursor-not-allowed opacity-50;
+    }
+
     .rfm-sku-group-delete {
-        @apply shrink-0 rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide;
-        border-color: #e8d4d4;
-        background: #fff8f8;
-        color: #9b4545;
+        @apply inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-base font-black leading-none;
+        border-color: rgba(138, 42, 34, 0.22);
+        background: #fff7f5;
+        color: #8a2a22;
     }
 
     .rfm-sku-group-delete:hover,
     .rfm-sku-group-delete:focus-visible {
-        border-color: #d9b0b0;
-        background: #fdeeee;
-        color: #7a2f2f;
+        border-color: #8a2a22;
+        outline: none;
     }
 
     .rfm-sku-group-delete:disabled {
-        opacity: 0.55;
-        cursor: not-allowed;
+        @apply cursor-not-allowed opacity-50;
     }
 
     .rfm-sku-group-chevron {

@@ -10,6 +10,7 @@ use App\Models\Product;
 use App\Models\ProductCategoryAssignment;
 use App\Models\ProductEcommerceProfile;
 use App\Models\ProductFamily;
+use App\Models\ProductMedia;
 use App\Models\ProductPosProfile;
 use App\Models\ProductPrice;
 use App\Models\ProductSource;
@@ -1563,6 +1564,110 @@ class RetailProductController extends Controller
     }
 
     /**
+     * Move every sellable SKU in one list bucket into a new product family.
+     * The bucket axis (e.g. Length 16") is dropped so the new family keeps other axes only.
+     */
+    public function splitFamilyBucketToNewFamily(
+        Request $request,
+        ProductFamily $family,
+        ProductVariantOption $option,
+    ): JsonResponse|RedirectResponse {
+        $bucketLabel = $option->label;
+
+        $newFamily = DB::transaction(function () use ($family, $option): ProductFamily {
+            return $this->executeSplitFamilyBucketToNewFamily($family, (int) $option->id);
+        });
+
+        $movedCount = $newFamily->products()->count();
+        $message = "Created a new family for {$bucketLabel} and moved {$movedCount} sellable SKU"
+            .($movedCount === 1 ? '' : 's').'.';
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'message' => $message,
+                'family_id' => $newFamily->id,
+                'moved_count' => $movedCount,
+                'redirect_url' => route('retail-products.families.show', $newFamily),
+            ]);
+        }
+
+        return redirect()
+            ->route('retail-products.families.show', $newFamily)
+            ->with('status', $message);
+    }
+
+    /**
+     * Split every SKU list bucket on this family into its own product family.
+     */
+    public function splitFamilyAllBucketsToNewFamilies(ProductFamily $family): RedirectResponse
+    {
+        $family->load([
+            'variantGroups.options',
+            'products.variantValues',
+        ]);
+
+        $grouping = RetailFamilySkuGrouper::forFamily($family, $family->products);
+        $bucketOptionIds = $grouping['sku_groups']
+            ->pluck('option_id')
+            ->filter()
+            ->map(fn (mixed $id): int => (int) $id)
+            ->unique()
+            ->values();
+
+        if (! $grouping['use_accordions'] || $bucketOptionIds->count() < 2) {
+            throw ValidationException::withMessages([
+                'family' => 'Need at least two SKU groups on the list before splitting into separate families.',
+            ]);
+        }
+
+        $createdFamilies = DB::transaction(function () use ($family, $bucketOptionIds): Collection {
+            $created = collect();
+
+            foreach ($bucketOptionIds as $optionId) {
+                $family->refresh()->load([
+                    'variantGroups.options',
+                    'categoryAssignments',
+                    'media',
+                    'ecommerceProfile',
+                    'sources',
+                    'products.variantValues',
+                ]);
+
+                $products = $this->familyProductsUsingVariantOption(
+                    $family,
+                    $this->familyVariantOption($family, $optionId),
+                );
+
+                if ($products->isEmpty()) {
+                    continue;
+                }
+
+                $created->push($this->executeSplitFamilyBucketToNewFamily($family, $optionId));
+            }
+
+            return $created;
+        });
+
+        if ($createdFamilies->isEmpty()) {
+            throw ValidationException::withMessages([
+                'family' => 'No sellable SKUs were available to split into new families.',
+            ]);
+        }
+
+        $labels = $createdFamilies
+            ->map(fn (ProductFamily $created): string => $created->display_family_name)
+            ->implode(', ');
+
+        return redirect()
+            ->route('retail-products.families.show', $family)
+            ->with(
+                'status',
+                'Created '.$createdFamilies->count().' separate families ('.$labels.'). '
+                .'Each keeps the same brand and style; open them from the catalogue to review SKUs.',
+            );
+    }
+
+    /**
      * Add a new option to one of this family's variant groups.
      * Used by the inline "manage values" UI inside the Add sellable SKU panel.
      */
@@ -1929,6 +2034,281 @@ class RetailProductController extends Controller
         }
 
         return $option;
+    }
+
+    /**
+     * @return array{groupMap: array<int, int>, optionMap: array<int, int>}
+     */
+    private function replicateFamilyVariantStructure(
+        ProductFamily $sourceFamily,
+        ProductFamily $targetFamily,
+        int $excludeGroupId,
+    ): array {
+        $groupMap = [];
+        $optionMap = [];
+
+        $sourceFamily->loadMissing('variantGroups.options');
+
+        foreach ($sourceFamily->variantGroups as $group) {
+            if ((int) $group->id === $excludeGroupId) {
+                continue;
+            }
+
+            $newGroup = ProductVariantGroup::query()->create([
+                'product_family_id' => $targetFamily->id,
+                'brand_catalogue_variant_id' => $group->brand_catalogue_variant_id,
+                'name' => $group->name,
+                'variant_type' => $group->variant_type,
+                'sort_order' => $group->sort_order,
+            ]);
+            $groupMap[(int) $group->id] = (int) $newGroup->id;
+
+            foreach ($group->options as $option) {
+                $newOption = ProductVariantOption::query()->create([
+                    'product_variant_group_id' => $newGroup->id,
+                    'brand_catalogue_variant_option_id' => $option->brand_catalogue_variant_option_id,
+                    'label' => $option->label,
+                    'value' => $option->value,
+                    'sort_order' => $option->sort_order,
+                ]);
+                $optionMap[(int) $option->id] = (int) $newOption->id;
+            }
+        }
+
+        return ['groupMap' => $groupMap, 'optionMap' => $optionMap];
+    }
+
+    private function replicateFamilyLevelRecords(ProductFamily $sourceFamily, ProductFamily $targetFamily): void
+    {
+        $sourceFamily->loadMissing(['categoryAssignments', 'media', 'ecommerceProfile', 'sources']);
+
+        foreach ($sourceFamily->categoryAssignments as $assignment) {
+            ProductCategoryAssignment::query()->create([
+                'product_family_id' => $targetFamily->id,
+                'product_id' => null,
+                'assignment_type' => $assignment->assignment_type,
+                'category_scaffold_id' => $assignment->category_scaffold_id,
+                'category_scaffold_axis_id' => $assignment->category_scaffold_axis_id,
+                'category_scaffold_node_id' => $assignment->category_scaffold_node_id,
+                'source_type' => 'retail_family_bucket_split',
+                'notes' => 'Copied when splitting a SKU list bucket into its own family.',
+            ]);
+        }
+
+        foreach ($sourceFamily->media as $media) {
+            ProductMedia::query()->create([
+                'product_family_id' => $targetFamily->id,
+                'product_id' => null,
+                'catalogue_image_id' => $media->catalogue_image_id,
+                'image_role' => $media->image_role,
+                'external_url' => $media->external_url,
+                'storage_disk' => $media->storage_disk,
+                'storage_path' => $media->storage_path,
+                'mime_type' => $media->mime_type,
+                'file_size' => $media->file_size,
+                'usage_context' => $media->usage_context,
+                'is_primary' => $media->is_primary,
+                'is_offline_ready' => $media->is_offline_ready,
+                'sort_order' => $media->sort_order,
+            ]);
+        }
+
+        if ($sourceFamily->ecommerceProfile) {
+            $profile = $sourceFamily->ecommerceProfile;
+            $targetFamily->ecommerceProfile()->updateOrCreate(
+                [
+                    'product_family_id' => $targetFamily->id,
+                    'profile_level' => 'family',
+                ],
+                [
+                    'online_title' => $profile->online_title,
+                    'short_description' => $profile->short_description,
+                    'long_description' => $profile->long_description,
+                    'seo_slug' => $targetFamily->slug,
+                    'seo_title' => $profile->seo_title,
+                    'seo_description' => $profile->seo_description,
+                    'tags' => $profile->tags,
+                    'is_published' => $profile->is_published,
+                    'click_and_collect_enabled' => $profile->click_and_collect_enabled,
+                ],
+            );
+        }
+
+        foreach ($sourceFamily->sources as $source) {
+            if ($source->product_id !== null) {
+                continue;
+            }
+
+            ProductSource::query()->create([
+                'product_family_id' => $targetFamily->id,
+                'product_id' => null,
+                'source_type' => $source->source_type,
+                'source_table' => $source->source_table,
+                'source_id' => $source->source_id,
+                'source_url' => $source->source_url,
+                'confidence' => $source->confidence,
+                'notes' => 'Copied when splitting a SKU list bucket into its own family.',
+            ]);
+        }
+    }
+
+    private function moveBucketProductsToFamily(
+        ProductFamily $targetFamily,
+        Collection $products,
+        int $excludeGroupId,
+        array $groupMap,
+        array $optionMap,
+    ): void {
+        foreach ($products as $product) {
+            $product->loadMissing('variantValues');
+
+            $product->update(['product_family_id' => $targetFamily->id]);
+
+            foreach ($product->variantValues as $value) {
+                if ((int) $value->product_variant_group_id === $excludeGroupId) {
+                    $value->delete();
+
+                    continue;
+                }
+
+                $mappedGroupId = $groupMap[(int) $value->product_variant_group_id] ?? null;
+                $mappedOptionId = $optionMap[(int) $value->product_variant_option_id] ?? null;
+
+                if ($mappedGroupId === null || $mappedOptionId === null) {
+                    $value->delete();
+
+                    continue;
+                }
+
+                $value->update([
+                    'product_variant_group_id' => $mappedGroupId,
+                    'product_variant_option_id' => $mappedOptionId,
+                ]);
+            }
+
+            ProductCategoryAssignment::query()
+                ->where('product_id', $product->id)
+                ->update(['product_family_id' => $targetFamily->id]);
+
+            ProductSource::query()
+                ->where('product_id', $product->id)
+                ->update(['product_family_id' => $targetFamily->id]);
+
+            ProductEcommerceProfile::query()
+                ->where('product_id', $product->id)
+                ->update(['product_family_id' => $targetFamily->id]);
+        }
+    }
+
+    private function pruneUnusedFamilyVariantOption(ProductFamily $family, int $optionId): void
+    {
+        $option = ProductVariantOption::query()
+            ->where('id', $optionId)
+            ->whereHas('group', fn ($query) => $query->where('product_family_id', $family->id))
+            ->first();
+
+        if (! $option) {
+            return;
+        }
+
+        $stillUsed = ProductVariantValue::query()
+            ->where('product_variant_option_id', $option->id)
+            ->exists();
+
+        if (! $stillUsed) {
+            $option->delete();
+        }
+    }
+
+    private function splitFamilyScopeKey(ProductVariantGroup $group, ProductVariantOption $option): string
+    {
+        $base = Str::slug($group->name.'-'.$option->label);
+
+        return Str::limit('split-'.($base !== '' ? $base : 'bucket-'.$option->id), 120, '');
+    }
+
+    private function executeSplitFamilyBucketToNewFamily(ProductFamily $family, int $optionId): ProductFamily
+    {
+        $family->loadMissing([
+            'variantGroups.options',
+            'categoryAssignments',
+            'media',
+            'ecommerceProfile',
+            'sources',
+            'products.variantValues',
+        ]);
+
+        $option = $this->familyVariantOption($family, $optionId);
+        $splitGroup = $this->familyVariantGroup($family, (int) $option->product_variant_group_id);
+
+        $grouping = RetailFamilySkuGrouper::forFamily($family, $family->products);
+        $groupingGroup = $grouping['grouping_group'];
+
+        if ($groupingGroup === null || (int) $groupingGroup->id !== (int) $splitGroup->id) {
+            throw ValidationException::withMessages([
+                'option' => 'Only a SKU list group (e.g. Length 16") can be moved into its own family.',
+            ]);
+        }
+
+        $products = $this->familyProductsUsingVariantOption($family, $option);
+
+        if ($products->isEmpty()) {
+            throw ValidationException::withMessages([
+                'option' => "No sellable SKUs use {$splitGroup->name}: {$option->label}.",
+            ]);
+        }
+
+        $scopeKey = $this->splitFamilyScopeKey($splitGroup, $option);
+
+        if ($family->brand_catalogue_style_id) {
+            $scopeTaken = ProductFamily::query()
+                ->where('brand_catalogue_style_id', $family->brand_catalogue_style_id)
+                ->where('catalogue_scope_key', $scopeKey)
+                ->where('id', '!=', $family->id)
+                ->exists();
+
+            if ($scopeTaken) {
+                throw ValidationException::withMessages([
+                    'option' => "A separate family already exists for {$splitGroup->name}: {$option->label}.",
+                ]);
+            }
+        }
+
+        $slugSeed = trim($family->family_name).' '.$option->label;
+
+        $targetFamily = ProductFamily::query()->create([
+            'brand_id' => $family->brand_id,
+            'brand_catalogue_id' => $family->brand_catalogue_id,
+            'brand_catalogue_brand_id' => $family->brand_catalogue_brand_id,
+            'brand_catalogue_line_id' => $family->brand_catalogue_line_id,
+            'brand_catalogue_product_type_id' => $family->brand_catalogue_product_type_id,
+            'brand_catalogue_style_id' => $family->brand_catalogue_style_id,
+            'catalogue_scope_key' => $family->brand_catalogue_style_id ? $scopeKey : $family->catalogue_scope_key,
+            'root_catalogue_name' => $family->root_catalogue_name,
+            'brand_name' => $family->brand_name,
+            'line_name' => $family->line_name,
+            'product_type_name' => $family->product_type_name,
+            'family_name' => $family->family_name,
+            'slug' => $this->uniqueSlug('product_families', 'slug', $slugSeed),
+            'description' => $family->description,
+            'source_url' => $family->source_url,
+            'status' => $family->status,
+            'published_at' => $family->published_at,
+            'sort_order' => ((int) ProductFamily::query()->max('sort_order')) + 1,
+        ]);
+
+        $maps = $this->replicateFamilyVariantStructure($family, $targetFamily, (int) $splitGroup->id);
+        $this->replicateFamilyLevelRecords($family, $targetFamily);
+        $this->moveBucketProductsToFamily(
+            $targetFamily,
+            $products,
+            (int) $splitGroup->id,
+            $maps['groupMap'],
+            $maps['optionMap'],
+        );
+        $this->pruneUnusedFamilyVariantOption($family, $optionId);
+
+        return $targetFamily->fresh(['products']);
     }
 
     public function suggestFamilyNaming(Request $request, ProductFamily $family, OpenAiRetailNamingService $naming): JsonResponse
