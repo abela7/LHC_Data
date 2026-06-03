@@ -45,7 +45,15 @@ class HairIntakeBarcodeService
             return $this->validEan13($digits);
         }
 
-        return in_array(strlen($digits), [8, 12], true);
+        if (strlen($digits) === 12) {
+            return $this->validUpcA($digits);
+        }
+
+        if (strlen($digits) === 8) {
+            return $this->validEan8($digits);
+        }
+
+        return false;
     }
 
     private function numberFromBarcode(string $barcode): int
@@ -59,6 +67,10 @@ class HairIntakeBarcodeService
 
     private function validEan13(string $digits): bool
     {
+        if (preg_match('/^(\d)\1{12}$/', $digits) === 1) {
+            return false;
+        }
+
         $sum = 0;
 
         for ($i = 0; $i < 12; $i++) {
@@ -68,5 +80,39 @@ class HairIntakeBarcodeService
         $check = (10 - ($sum % 10)) % 10;
 
         return $check === (int) $digits[12];
+    }
+
+    private function validUpcA(string $digits): bool
+    {
+        if (preg_match('/^(\d)\1{11}$/', $digits) === 1) {
+            return false;
+        }
+
+        $sum = 0;
+
+        for ($i = 0; $i < 11; $i++) {
+            $sum += (int) $digits[$i] * ($i % 2 === 0 ? 1 : 3);
+        }
+
+        $check = (10 - ($sum % 10)) % 10;
+
+        return $check === (int) $digits[11];
+    }
+
+    private function validEan8(string $digits): bool
+    {
+        if (preg_match('/^(\d)\1{7}$/', $digits) === 1) {
+            return false;
+        }
+
+        $sum = 0;
+
+        for ($i = 0; $i < 7; $i++) {
+            $sum += (int) $digits[$i] * ($i % 2 === 0 ? 3 : 1);
+        }
+
+        $check = (10 - ($sum % 10)) % 10;
+
+        return $check === (int) $digits[7];
     }
 }

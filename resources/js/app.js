@@ -79,6 +79,111 @@ const firstLaravelError = (payload) => {
 
 const RFM_BARCODE_MODE_KEY = 'rfm-barcode-input-mode';
 const BARCODE_CAMERA_DETECT_MS = 180;
+const BARCODE_CAMERA_CONFIRM_READS = 2;
+
+const barcodeDigitsOnly = (value) => (value || '').replace(/\D+/g, '');
+
+const isRepeatingDigitBarcode = (digits) => /^(\d)\1+$/.test(digits);
+
+const isValidGtinCheckDigit = (digits) => {
+    const len = digits.length;
+    if (![8, 12, 13].includes(len) || !/^\d+$/.test(digits) || isRepeatingDigitBarcode(digits)) {
+        return false;
+    }
+
+    let sum = 0;
+    for (let i = 0; i < len - 1; i += 1) {
+        const weight = len === 8
+            ? (i % 2 === 0 ? 3 : 1)
+            : (i % 2 === 0 ? 1 : 3);
+        sum += Number(digits[i]) * weight;
+    }
+    const check = (10 - (sum % 10)) % 10;
+
+    return check === Number(digits[len - 1]);
+};
+
+const normalizeRetailBarcode = (raw) => {
+    const trimmed = (raw || '').trim();
+    if (!trimmed) {
+        return null;
+    }
+
+    const lhcMatch = trimmed.match(/^LHC(\d{8})$/i);
+    if (lhcMatch) {
+        return `LHC${lhcMatch[1]}`;
+    }
+
+    if (/[^0-9\s-]/.test(trimmed)) {
+        return null;
+    }
+
+    const digits = barcodeDigitsOnly(trimmed);
+    if (digits.length !== 8 && digits.length !== 12 && digits.length !== 13) {
+        return null;
+    }
+
+    return digits;
+};
+
+const isValidRetailBarcode = (raw) => {
+    const normalized = normalizeRetailBarcode(raw);
+    if (!normalized) {
+        return false;
+    }
+    if (/^LHC\d{8}$/.test(normalized)) {
+        return true;
+    }
+
+    return isValidGtinCheckDigit(normalized);
+};
+
+const validateRetailBarcodeInput = (value, { waiting = false } = {}) => {
+    const trimmed = (value || '').trim();
+    if (!trimmed) {
+        return { ok: false, waiting: true, message: 'Waiting for barcode...' };
+    }
+    if (trimmed.length < 6) {
+        return {
+            ok: false,
+            waiting: waiting || true,
+            message: waiting ? 'Waiting for barcode...' : 'Barcode is too short.',
+        };
+    }
+    if (!isValidRetailBarcode(trimmed)) {
+        return {
+            ok: false,
+            message: 'Not a valid barcode. Scan EAN-8, UPC/EAN-12, EAN-13, or LHC code with a correct check digit.',
+        };
+    }
+
+    return { ok: true, value: normalizeRetailBarcode(trimmed) };
+};
+
+const acceptCameraBarcodeCandidate = (rawValue, state, onDetected, onConfirming) => {
+    if (!isValidRetailBarcode(rawValue)) {
+        state.lastValid = '';
+        state.matchCount = 0;
+        return;
+    }
+
+    const normalized = normalizeRetailBarcode(rawValue);
+    if (normalized === state.lastValid) {
+        state.matchCount += 1;
+    } else {
+        state.lastValid = normalized;
+        state.matchCount = 1;
+    }
+
+    if (state.matchCount < BARCODE_CAMERA_CONFIRM_READS) {
+        onConfirming?.();
+        return;
+    }
+
+    state.lastValid = '';
+    state.matchCount = 0;
+    onDetected(normalized);
+};
 
 /** Camera capture is widely available; native BarcodeDetector is not (e.g. Chrome on Windows). */
 const cameraBarcodeAvailable = () =>
@@ -101,13 +206,33 @@ const createCameraBarcodeSession = ({
     video,
     onDetected,
     onError,
+    onConfirming,
     detectIntervalMs = BARCODE_CAMERA_DETECT_MS,
+    confirmReads = BARCODE_CAMERA_CONFIRM_READS,
 }) => {
     let stream = null;
     let timer = null;
     let detector = null;
     let zxingReader = null;
     let closed = false;
+    const confirmState = { lastValid: '', matchCount: 0 };
+
+    const emitCandidate = (rawValue) => {
+        if (confirmReads <= 1) {
+            const check = validateRetailBarcodeInput(rawValue);
+            if (!check.ok) {
+                return;
+            }
+            onDetected(check.value);
+            return;
+        }
+        acceptCameraBarcodeCandidate(rawValue, confirmState, (canonical) => {
+            const check = validateRetailBarcodeInput(canonical);
+            if (check.ok) {
+                onDetected(check.value);
+            }
+        }, onConfirming);
+    };
 
     const close = () => {
         if (closed) return;
@@ -137,7 +262,7 @@ const createCameraBarcodeSession = ({
                 const codes = await detector.detect(video);
                 const value = codes?.[0]?.rawValue || '';
                 if (value) {
-                    onDetected(value);
+                    emitCandidate(value);
                 }
             } catch {
                 onError?.('Barcode scanning failed. Use your scanner or type the code.');
@@ -152,7 +277,7 @@ const createCameraBarcodeSession = ({
         await zxingReader.decodeFromVideoElement(video, (result, err) => {
             if (closed) return;
             if (result) {
-                onDetected(result.getText());
+                emitCandidate(result.getText());
                 return;
             }
             if (err && !isBenignBarcodeScanError(err)) {
@@ -3973,9 +4098,12 @@ const initRetailFamilyManager = () => {
             setBarcodeStatus('Camera on — point at the barcode…');
             barcodeCameraSession = createCameraBarcodeSession({
                 video: barcodeCameraVideo,
+                onConfirming: () => {
+                    setBarcodeStatus('Valid barcode — hold steady to confirm…');
+                },
                 onDetected: (value) => {
                     applyBarcodeInputValue(value);
-                    setBarcodeStatus('Barcode detected. Saving…');
+                    setBarcodeStatus('Barcode confirmed. Saving…');
                     stopBarcodeCamera();
                     setBarcodeInputMode('keyboard', { focusKeyboard: true, persist: true });
                 },
@@ -4036,27 +4164,6 @@ const initRetailFamilyManager = () => {
         barcodeStatus.classList.toggle('is-error', isError);
     };
 
-    const barcodeDigitsOnly = (value) => (value || '').replace(/\D+/g, '');
-
-    const isValidEan13 = (digits) => {
-        if (digits.length !== 13) return false;
-        let sum = 0;
-        for (let i = 0; i < 12; i += 1) {
-            sum += Number(digits[i]) * (i % 2 === 0 ? 1 : 3);
-        }
-        const check = (10 - (sum % 10)) % 10;
-        return check === Number(digits[12]);
-    };
-
-    const isPlausibleBarcode = (value) => {
-        const raw = (value || '').trim();
-        if (!raw) return false;
-        if (/^LHC\d{8}$/i.test(raw)) return true;
-        const digits = barcodeDigitsOnly(raw);
-        if (digits.length === 13) return isValidEan13(digits);
-        return digits.length === 8 || digits.length === 12;
-    };
-
     const barcodeConflictLabel = (item) => {
         const values = [...item.querySelectorAll('.rfm-row-variant-value')]
             .map((el) => el.textContent.trim())
@@ -4066,10 +4173,11 @@ const initRetailFamilyManager = () => {
     };
 
     const findFamilyBarcodeConflict = (value, currentProductId) => {
-        const normalized = value.trim().toLowerCase();
+        const normalized = (normalizeRetailBarcode(value) || value.trim()).toLowerCase();
         if (!normalized) return null;
         for (const item of getSkuItems()) {
-            const existing = (item.dataset.rfmBarcode || '').trim().toLowerCase();
+            const existing = (normalizeRetailBarcode(item.dataset.rfmBarcode || '')
+                || (item.dataset.rfmBarcode || '').trim()).toLowerCase();
             if (!existing || existing !== normalized) continue;
             if (String(item.dataset.rfmProductId || '') === String(currentProductId || '')) continue;
             return item;
@@ -4078,25 +4186,19 @@ const initRetailFamilyManager = () => {
     };
 
     const validateBarcodeForSave = (value) => {
-        const trimmed = value.trim();
-        if (trimmed.length < 6) {
-            return { ok: false, waiting: true, message: 'Waiting for barcode...' };
-        }
-        if (!isPlausibleBarcode(trimmed)) {
-            return {
-                ok: false,
-                message: 'Invalid barcode. Check the scan (EAN-8/12/13 or LHC code).',
-            };
+        const check = validateRetailBarcodeInput(value, { waiting: true });
+        if (!check.ok) {
+            return check;
         }
         const productId = barcodeButton?.closest('[data-rfm-sku]')?.dataset.rfmProductId;
-        const conflict = findFamilyBarcodeConflict(trimmed, productId);
+        const conflict = findFamilyBarcodeConflict(check.value, productId);
         if (conflict) {
             return {
                 ok: false,
                 message: `Barcode already used on ${barcodeConflictLabel(conflict)} in this family.`,
             };
         }
-        return { ok: true, value: trimmed };
+        return { ok: true, value: check.value };
     };
 
     const saveBarcode = async () => {
@@ -6366,7 +6468,12 @@ const initHairIntakeWizard = () => {
         const session = createCameraBarcodeSession({
             video,
             onDetected: (value) => {
-                input.value = value;
+                const check = validateRetailBarcodeInput(value);
+                if (!check.ok) {
+                    showToast(check.message, true);
+                    return;
+                }
+                input.value = check.value;
                 input.dispatchEvent(new Event('input', { bubbles: true }));
                 showToast('Barcode scanned.');
                 session.close();
