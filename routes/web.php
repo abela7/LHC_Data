@@ -294,6 +294,7 @@ Route::post('/brand-catalogue/styles/{style}/variants', [BrandCatalogueControlle
 Route::post('/brand-catalogue/styles/{style}/variant-matrix', [BrandCatalogueController::class, 'syncVariantMatrix'])->name('brand-catalogue.styles.variant-matrix.sync');
 Route::post('/brand-catalogue/styles/{style}/skus', [BrandCatalogueController::class, 'storeSku'])->name('brand-catalogue.skus.store');
 Route::post('/brand-catalogue/styles/{style}/publish-products', [BrandCatalogueProductPublishController::class, 'publishStyle'])->name('brand-catalogue.styles.publish-products');
+Route::post('/brand-catalogue/variant-options/{option}/publish-retail', [BrandCatalogueProductPublishController::class, 'publishRetailForVariantOption'])->name('brand-catalogue.variant-options.publish-retail');
 Route::patch('/brand-catalogue/variants/{variant}', [BrandCatalogueController::class, 'updateVariant'])->name('brand-catalogue.variants.update');
 Route::post('/brand-catalogue/variants/{variant}/options', [BrandCatalogueController::class, 'storeVariantOption'])->name('brand-catalogue.variant-options.store');
 Route::patch('/brand-catalogue/variant-options/{option}', [BrandCatalogueController::class, 'updateVariantOption'])->name('brand-catalogue.variant-options.update');

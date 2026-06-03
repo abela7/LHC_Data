@@ -15006,6 +15006,33 @@
         opacity: 0.55;
     }
 
+    .sw-opt-sellable-form {
+        @apply inline;
+    }
+
+    .sw-opt-sellable-btn {
+        @apply inline-flex shrink-0 items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-bold no-underline;
+        border-color: rgba(29, 111, 95, 0.28);
+        background: #edf8f4;
+        color: #145f53;
+    }
+
+    .sw-opt-sellable-btn em {
+        @apply font-bold not-italic opacity-80;
+    }
+
+    .sw-opt-sellable-btn--create {
+        border-color: rgba(42, 92, 138, 0.28);
+        background: #f5f9ff;
+        color: #2a5c8a;
+    }
+
+    .sw-opt-sellable-btn:hover,
+    .sw-opt-sellable-btn:focus-visible {
+        outline: none;
+        filter: brightness(0.97);
+    }
+
     .sw-publish-split-hint {
         @apply rounded-xl border px-3 py-2 text-xs leading-5;
         border-color: rgba(42, 92, 138, 0.16);

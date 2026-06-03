@@ -88,12 +88,12 @@
                     <div class="sw-style-retail-nav-pills">
                         @foreach ($retailFamilies as $retailFamily)
                             @php
-                                $scopeLabel = \App\Support\RetailStyleFamilyCatalogue::scopeLabel($retailFamily->catalogue_scope_key);
+                                $pillLabel = \App\Support\RetailStyleFamilyCatalogue::familyDisplayLabel($retailFamily, $style->variants);
                             @endphp
                             <a href="{{ route('retail-products.families.show', $retailFamily) }}"
                                class="sw-style-retail-pill {{ (int) ($retailFamily->products_count ?? 0) === 0 ? 'is-empty' : '' }}"
-                               title="{{ $scopeLabel }} — {{ $retailFamily->products_count }} sellable SKU{{ $retailFamily->products_count === 1 ? '' : 's' }}">
-                                {{ $scopeLabel }}
+                               title="{{ $pillLabel }} — {{ $retailFamily->products_count }} sellable SKU{{ $retailFamily->products_count === 1 ? '' : 's' }}">
+                                {{ $pillLabel }}
                                 <em>{{ $retailFamily->products_count }}</em>
                             </a>
                         @endforeach
@@ -595,6 +595,29 @@
                                                             @endif
                                                             <span class="sw-opt-sort-badge">#{{ $option->sort_order }}</span>
                                                         </span>
+                                                        @php
+                                                            $optionRetail = $retailByCatalogueOptionId[$option->id] ?? null;
+                                                        @endphp
+                                                        @if ($optionRetail)
+                                                            <a href="{{ route('retail-products.families.show', $optionRetail['family_id']) }}"
+                                                               class="sw-opt-sellable-btn"
+                                                               title="Open sellable products for {{ $option->label }}"
+                                                               onclick="event.stopPropagation()">
+                                                                Sellable <em>{{ $optionRetail['products_count'] }}</em>
+                                                            </a>
+                                                        @else
+                                                            <form method="POST"
+                                                                  action="{{ route('brand-catalogue.variant-options.publish-retail', $option) }}"
+                                                                  class="sw-opt-sellable-form"
+                                                                  onclick="event.stopPropagation()">
+                                                                @csrf
+                                                                <button type="submit"
+                                                                        class="sw-opt-sellable-btn sw-opt-sellable-btn--create"
+                                                                        title="Create sellable family for {{ $option->label }}">
+                                                                    + Sellable
+                                                                </button>
+                                                            </form>
+                                                        @endif
                                                         <svg class="sw-opt-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="m6 9 6 6 6-6"/></svg>
                                                         <form method="POST"
                                                               action="{{ route('brand-catalogue.variant-options.destroy', $option) }}"

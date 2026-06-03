@@ -2275,9 +2275,7 @@ class RetailProductController extends Controller
 
     private function splitFamilyScopeKey(ProductVariantGroup $group, ProductVariantOption $option): string
     {
-        $base = Str::slug($group->name.'-'.$option->label);
-
-        return Str::limit('split-'.($base !== '' ? $base : 'bucket-'.$option->id), 120, '');
+        return RetailStyleFamilyCatalogue::splitScopeKey($group->name, $option->label);
     }
 
     /**

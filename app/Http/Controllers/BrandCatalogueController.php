@@ -362,13 +362,6 @@ class BrandCatalogueController extends Controller
         $this->assertProductTypeInLine($line, $productType);
         $this->assertStyleInProductType($brand, $productType, $style);
 
-        $retailFamilies = RetailStyleFamilyCatalogue::familiesForStyle((int) $style->id);
-        $publishedFamily = RetailStyleFamilyCatalogue::primaryFamily($retailFamilies);
-
-        if ($retailFamilies->count() === 1 && $publishedFamily !== null && ! $request->boolean('catalogue')) {
-            return redirect()->route('retail-products.families.show', $publishedFamily);
-        }
-
         $style->load([
             'variants.options.images',
             'images',
@@ -376,6 +369,18 @@ class BrandCatalogueController extends Controller
             'skus.optionValues.images',
             'skus.images',
         ]);
+
+        $retailFamilies = RetailStyleFamilyCatalogue::familiesForStyle((int) $style->id);
+        $publishedFamily = RetailStyleFamilyCatalogue::primaryFamily($retailFamilies);
+        $retailByCatalogueOptionId = RetailStyleFamilyCatalogue::catalogueOptionRetailMap(
+            (int) $style->id,
+            $style->variants,
+            $retailFamilies,
+        );
+
+        if ($retailFamilies->count() === 1 && $publishedFamily !== null && ! $request->boolean('catalogue')) {
+            return redirect()->route('retail-products.families.show', $publishedFamily);
+        }
 
         $line->loadMissing([
             'productTypes' => fn ($query) => $query->withCount('styles'),
@@ -399,6 +404,7 @@ class BrandCatalogueController extends Controller
             'retailFamilies' => $retailFamilies,
             'retailFamilyCount' => $retailFamilies->count(),
             'retailSkuTotal' => (int) $retailFamilies->sum('products_count'),
+            'retailByCatalogueOptionId' => $retailByCatalogueOptionId,
             'materialOptions' => $this->materialOptions(),
             'productTypeOptions' => $line->productTypes,
             'optionImageRoleOptions' => $this->optionImageRoleOptions(),

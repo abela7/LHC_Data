@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace App\Support;
 
+use App\Models\BrandCatalogueStyle;
+use App\Models\BrandCatalogueVariant;
+use App\Models\BrandCatalogueVariantOption;
 use App\Models\ProductFamily;
 use App\Models\ProductSource;
 use Illuminate\Support\Collection;
@@ -17,9 +20,6 @@ use Illuminate\Support\Str;
 final class RetailStyleFamilyCatalogue
 {
     /**
-     * All retail families for this style (including split buckets).
-     * Re-attaches orphaned split families that lost brand_catalogue_style_id.
-     *
      * @return Collection<int, ProductFamily>
      */
     public static function familiesForStyle(int $styleId, bool $repairOrphans = true): Collection
@@ -32,13 +32,26 @@ final class RetailStyleFamilyCatalogue
             self::relinkSplitOrphansForStyle($styleId);
         }
 
-        return ProductFamily::query()
+        $families = ProductFamily::query()
             ->where('brand_catalogue_style_id', $styleId)
             ->withCount('products')
             ->orderByRaw('catalogue_scope_key IS NULL DESC')
             ->orderBy('catalogue_scope_key')
             ->orderBy('id')
             ->get();
+
+        if ($families->isNotEmpty()) {
+            $families->load('variantGroups.options');
+        }
+
+        return $families;
+    }
+
+    public static function splitScopeKey(string $axisName, string $optionLabel): string
+    {
+        $base = Str::slug($axisName.'-'.$optionLabel);
+
+        return Str::limit('split-'.($base !== '' ? $base : 'option'), 120, '');
     }
 
     public static function scopeLabel(?string $scopeKey): string
@@ -48,12 +61,148 @@ final class RetailStyleFamilyCatalogue
         }
 
         if (str_starts_with($scopeKey, 'split-')) {
-            $readable = str_replace('-', ' ', substr($scopeKey, 6));
+            $slug = substr($scopeKey, 6);
 
-            return self::formatLengthStyleLabel($readable);
+            if (preg_match('/(?:^|-)(\d{1,3})(?:-|$)/', $slug, $matches)) {
+                return $matches[1].'"';
+            }
+
+            $readable = str_replace('-', ' ', $slug);
+
+            if (preg_match('/^length\s+(\d+)$/i', trim($readable), $matches)) {
+                return $matches[1].'"';
+            }
+
+            return Str::title($readable);
         }
 
         return Str::title(str_replace('-', ' ', $scopeKey));
+    }
+
+    /**
+     * Prefer catalogue option label (e.g. 20") for sidebar pills.
+     *
+     * @param  Collection<int, BrandCatalogueVariant>  $catalogueVariants
+     */
+    public static function familyDisplayLabel(ProductFamily $family, Collection $catalogueVariants): string
+    {
+        if (! filled($family->catalogue_scope_key)) {
+            return 'Main';
+        }
+
+        foreach ($catalogueVariants as $variant) {
+            foreach ($variant->options as $option) {
+                if (self::splitScopeKey($variant->name, $option->label) === $family->catalogue_scope_key) {
+                    return $option->label;
+                }
+            }
+        }
+
+        return self::scopeLabel($family->catalogue_scope_key);
+    }
+
+    /**
+     * Map catalogue variant option id → linked retail family (if any).
+     *
+     * @param  Collection<int, BrandCatalogueVariant>  $catalogueVariants
+     * @param  Collection<int, ProductFamily>  $families
+     * @return array<int, array{family_id: int, products_count: int, label: string}>
+     */
+    public static function catalogueOptionRetailMap(int $styleId, Collection $catalogueVariants, Collection $families): array
+    {
+        if ($styleId <= 0 || $catalogueVariants->isEmpty()) {
+            return [];
+        }
+
+        if ($families->isEmpty()) {
+            $families = self::familiesForStyle($styleId, repairOrphans: false);
+        }
+
+        $map = [];
+
+        foreach ($catalogueVariants as $variant) {
+            foreach ($variant->options as $option) {
+                $family = self::resolveFamilyForCatalogueOption($families, $variant->name, $option);
+
+                if ($family === null) {
+                    continue;
+                }
+
+                $map[(int) $option->id] = [
+                    'family_id' => (int) $family->id,
+                    'products_count' => (int) $family->products_count,
+                    'label' => $option->label,
+                ];
+            }
+        }
+
+        return $map;
+    }
+
+    /**
+     * @param  Collection<int, ProductFamily>  $families
+     */
+    public static function resolveFamilyForCatalogueOption(
+        Collection $families,
+        string $variantName,
+        BrandCatalogueVariantOption $catalogueOption,
+    ): ?ProductFamily {
+        $scopeKey = self::splitScopeKey($variantName, $catalogueOption->label);
+
+        $byScope = $families->first(
+            fn (ProductFamily $family): bool => (string) ($family->catalogue_scope_key ?? '') === $scopeKey,
+        );
+
+        if ($byScope instanceof ProductFamily) {
+            return $byScope;
+        }
+
+        $catalogueOptionId = (int) $catalogueOption->id;
+
+        $byCatalogueOption = $families->first(function (ProductFamily $family) use ($catalogueOptionId): bool {
+            foreach ($family->variantGroups as $group) {
+                foreach ($group->options as $option) {
+                    if ((int) ($option->brand_catalogue_variant_option_id ?? 0) === $catalogueOptionId) {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        });
+
+        if ($byCatalogueOption instanceof ProductFamily) {
+            return $byCatalogueOption;
+        }
+
+        $needle = Str::lower(trim($catalogueOption->label));
+
+        return $families->first(function (ProductFamily $family) use ($needle): bool {
+            if (! filled($family->catalogue_scope_key)) {
+                return false;
+            }
+
+            $label = Str::lower(self::scopeLabel($family->catalogue_scope_key));
+
+            return $label === $needle || str_contains($label, $needle);
+        });
+    }
+
+    /**
+     * SKU ids on this style that include the given catalogue option.
+     *
+     * @return list<int>
+     */
+    public static function catalogueSkuIdsForOption(BrandCatalogueStyle $style, BrandCatalogueVariantOption $option): array
+    {
+        $style->loadMissing(['skus.optionValues']);
+
+        return $style->skus
+            ->filter(fn ($sku) => $sku->optionValues->contains('id', $option->id))
+            ->pluck('id')
+            ->map(fn (mixed $id): int => (int) $id)
+            ->values()
+            ->all();
     }
 
     /**
@@ -72,8 +221,6 @@ final class RetailStyleFamilyCatalogue
     }
 
     /**
-     * One representative family per style for list cards, with aggregate counts attached.
-     *
      * @param  array<int, int>  $styleIds
      * @return Collection<int, ProductFamily>
      */
@@ -103,9 +250,6 @@ final class RetailStyleFamilyCatalogue
             });
     }
 
-    /**
-     * Split targets that lost brand_catalogue_style_id are re-linked to the parent style.
-     */
     private static function relinkSplitOrphansForStyle(int $styleId): void
     {
         if (! Schema::hasColumn('product_families', 'catalogue_scope_key')) {
@@ -120,9 +264,7 @@ final class RetailStyleFamilyCatalogue
             return;
         }
 
-        $maxPasses = 12;
-
-        for ($pass = 0; $pass < $maxPasses; $pass++) {
+        for ($pass = 0; $pass < 12; $pass++) {
             $childIds = ProductSource::query()
                 ->where('source_type', 'retail_family_bucket_split')
                 ->whereIn('source_id', $knownFamilyIds->all())
@@ -151,11 +293,53 @@ final class RetailStyleFamilyCatalogue
                 $knownFamilyIds->push($orphan->id);
             }
         }
+
+        self::relinkFamiliesByCatalogueOptionIds($styleId);
     }
 
-    private static function attachFamilyToStyle(ProductFamily $family, int $styleId): void
+    /**
+     * Re-attach split families using brand_catalogue_variant_option_id on retail options.
+     */
+    private static function relinkFamiliesByCatalogueOptionIds(int $styleId): void
     {
-        $scopeKey = self::inferScopeKeyForFamily($family);
+        $orphans = ProductFamily::query()
+            ->whereNull('brand_catalogue_style_id')
+            ->whereHas('variantGroups.options', fn ($query) => $query
+                ->whereNotNull('brand_catalogue_variant_option_id'))
+            ->with('variantGroups.options')
+            ->get();
+
+        foreach ($orphans as $family) {
+            $catalogueOptionId = (int) $family->variantGroups
+                ->flatMap(fn ($group) => $group->options)
+                ->pluck('brand_catalogue_variant_option_id')
+                ->filter()
+                ->first();
+
+            if ($catalogueOptionId <= 0) {
+                continue;
+            }
+
+            $catalogueOption = BrandCatalogueVariantOption::query()
+                ->with('variant')
+                ->find($catalogueOptionId);
+
+            if (! $catalogueOption?->variant) {
+                continue;
+            }
+
+            if ((int) ($catalogueOption->variant->brand_catalogue_style_id ?? 0) !== $styleId) {
+                continue;
+            }
+
+            $scopeKey = self::splitScopeKey($catalogueOption->variant->name, $catalogueOption->label);
+            self::attachFamilyToStyle($family, $styleId, $scopeKey);
+        }
+    }
+
+    private static function attachFamilyToStyle(ProductFamily $family, int $styleId, ?string $preferredScopeKey = null): void
+    {
+        $scopeKey = $preferredScopeKey ?? self::inferScopeKeyForFamily($family);
         $candidate = $scopeKey;
 
         while (
@@ -182,28 +366,13 @@ final class RetailStyleFamilyCatalogue
             ->value('notes');
 
         if (is_string($notes) && preg_match('/\(([^:]+):\s*([^)]+)\)\s*\.?$/u', $notes, $matches)) {
-            $axis = trim($matches[1]);
-            $value = trim($matches[2]);
-            $base = Str::slug($axis.'-'.$value);
-
-            return Str::limit('split-'.($base !== '' ? $base : 'bucket-'.$family->id), 120, '');
+            return self::splitScopeKey(trim($matches[1]), trim($matches[2]));
         }
 
         if (filled($family->catalogue_scope_key)) {
             return (string) $family->catalogue_scope_key;
         }
 
-        $slugTail = Str::afterLast((string) $family->slug, '-');
-
-        return Str::limit('split-'.($slugTail !== '' ? $slugTail : 'family-'.$family->id), 120, '');
-    }
-
-    private static function formatLengthStyleLabel(string $readable): string
-    {
-        if (preg_match('/^length\s+(\d+)$/i', trim($readable), $matches)) {
-            return $matches[1].'"';
-        }
-
-        return Str::title($readable);
+        return Str::limit('split-family-'.$family->id, 120, '');
     }
 }
