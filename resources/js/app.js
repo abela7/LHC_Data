@@ -77,6 +77,77 @@ const firstLaravelError = (payload) => {
     return errors[0] || '';
 };
 
+const RFM_BARCODE_MODE_KEY = 'rfm-barcode-input-mode';
+const BARCODE_CAMERA_DETECT_MS = 180;
+
+const cameraBarcodeSupported = () =>
+    typeof window !== 'undefined'
+    && 'BarcodeDetector' in window
+    && !!navigator.mediaDevices?.getUserMedia;
+
+const createCameraBarcodeSession = ({
+    video,
+    onDetected,
+    onError,
+    detectIntervalMs = BARCODE_CAMERA_DETECT_MS,
+}) => {
+    let stream = null;
+    let timer = null;
+    let detector = null;
+    let closed = false;
+
+    const close = () => {
+        if (closed) return;
+        closed = true;
+        window.clearInterval(timer);
+        timer = null;
+        stream?.getTracks?.().forEach((track) => track.stop());
+        stream = null;
+        if (video) {
+            video.srcObject = null;
+        }
+    };
+
+    const start = async () => {
+        if (!cameraBarcodeSupported()) {
+            onError?.('Camera scanning is not supported in this browser. Use a hardware scanner or type the code.');
+            return false;
+        }
+
+        try {
+            stream = await navigator.mediaDevices.getUserMedia({
+                video: { facingMode: { ideal: 'environment' } },
+                audio: false,
+            });
+            video.srcObject = stream;
+            await video.play?.().catch(() => {});
+            detector = new window.BarcodeDetector({
+                formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128'],
+            });
+            timer = window.setInterval(async () => {
+                if (closed || video.readyState < 2) return;
+                try {
+                    const codes = await detector.detect(video);
+                    const value = codes?.[0]?.rawValue || '';
+                    if (value) {
+                        onDetected(value);
+                    }
+                } catch {
+                    onError?.('Barcode scanning failed. Use your scanner or type the code.');
+                    close();
+                }
+            }, detectIntervalMs);
+            return true;
+        } catch {
+            onError?.('Camera permission was blocked. Use your scanner or type the code.');
+            close();
+            return false;
+        }
+    };
+
+    return { start, close };
+};
+
 const uploadFailureMessage = (response, payload, fallback = 'Unable to save image.', requestUrl = '') => {
     const serverMessage = firstLaravelError(payload);
     if (serverMessage) return serverMessage;
@@ -3803,16 +3874,116 @@ const initRetailFamilyManager = () => {
     const barcodeTitle = root.querySelector('[data-rfm-barcode-title]');
     const barcodeVariants = root.querySelector('[data-rfm-barcode-variants]');
     const barcodeStatus = root.querySelector('[data-rfm-barcode-status]');
+    const barcodeModeTabs = root.querySelector('[data-rfm-barcode-mode-tabs]');
+    const barcodeKeyboardPanel = root.querySelector('[data-rfm-barcode-keyboard-panel]');
+    const barcodeCameraPanel = root.querySelector('[data-rfm-barcode-camera-panel]');
+    const barcodeCameraVideo = root.querySelector('[data-rfm-barcode-video]');
+    const barcodeCameraJump = root.querySelector('[data-rfm-barcode-camera-jump]');
+    const barcodeModeButtons = root.querySelectorAll('[data-rfm-barcode-mode]');
     let barcodeAction = '';
     let barcodeButton = null;
     let barcodeTimer = null;
     let barcodeSaving = false;
+    let barcodeCameraSession = null;
+    let barcodeInputMode = 'keyboard';
+
+    const stopBarcodeCamera = () => {
+        barcodeCameraSession?.close();
+        barcodeCameraSession = null;
+    };
+
+    const applyBarcodeInputValue = (value) => {
+        if (!barcodeInput) return;
+        barcodeInput.value = value;
+        barcodeInput.dispatchEvent(new Event('input', { bubbles: true }));
+    };
+
+    const setBarcodeInputMode = (mode, { focusKeyboard = false, persist = true } = {}) => {
+        const nextMode = mode === 'camera' && cameraBarcodeSupported() ? 'camera' : 'keyboard';
+        barcodeInputMode = nextMode;
+
+        if (persist) {
+            try {
+                sessionStorage.setItem(RFM_BARCODE_MODE_KEY, nextMode);
+            } catch {
+                // ignore storage errors
+            }
+        }
+
+        barcodeModeButtons.forEach((button) => {
+            const active = button.dataset.rfmBarcodeMode === nextMode;
+            button.classList.toggle('is-active', active);
+            button.setAttribute('aria-selected', active ? 'true' : 'false');
+        });
+
+        if (barcodeKeyboardPanel) {
+            barcodeKeyboardPanel.hidden = nextMode !== 'keyboard';
+        }
+        if (barcodeCameraPanel) {
+            barcodeCameraPanel.hidden = nextMode !== 'camera';
+        }
+
+        if (nextMode === 'camera') {
+            stopBarcodeCamera();
+            if (!barcodeCameraVideo) return;
+            setBarcodeStatus('Camera on — point at the barcode…');
+            barcodeCameraSession = createCameraBarcodeSession({
+                video: barcodeCameraVideo,
+                onDetected: (value) => {
+                    applyBarcodeInputValue(value);
+                    setBarcodeStatus('Barcode detected. Saving…');
+                    stopBarcodeCamera();
+                    setBarcodeInputMode('keyboard', { focusKeyboard: true, persist: true });
+                },
+                onError: (message) => {
+                    setBarcodeStatus(message, true);
+                    showToast(message, true);
+                    setBarcodeInputMode('keyboard', { focusKeyboard: true, persist: false });
+                },
+            });
+            barcodeCameraSession.start();
+            return;
+        }
+
+        stopBarcodeCamera();
+        if (focusKeyboard && barcodeInput) {
+            window.setTimeout(() => {
+                barcodeInput.focus();
+                barcodeInput.select();
+            }, 50);
+        }
+    };
+
+    const readStoredBarcodeMode = () => {
+        try {
+            return sessionStorage.getItem(RFM_BARCODE_MODE_KEY) === 'camera' ? 'camera' : 'keyboard';
+        } catch {
+            return 'keyboard';
+        }
+    };
+
+    const initBarcodeModeUi = () => {
+        const supported = cameraBarcodeSupported();
+        if (barcodeModeTabs) {
+            barcodeModeTabs.hidden = !supported;
+        }
+        if (barcodeCameraJump) {
+            barcodeCameraJump.hidden = !supported;
+        }
+        if (!supported && barcodeInputMode === 'camera') {
+            barcodeInputMode = 'keyboard';
+        }
+    };
+
+    initBarcodeModeUi();
 
     const closeBarcode = () => {
         if (!barcodeModal) return;
+        stopBarcodeCamera();
         barcodeModal.hidden = true;
         barcodeModal.setAttribute('aria-hidden', 'true');
         window.clearTimeout(barcodeTimer);
+        setBarcodeInputMode('keyboard', { focusKeyboard: false, persist: false });
     };
 
     const setBarcodeStatus = (message, isError = false) => {
@@ -3970,11 +4141,28 @@ const initRetailFamilyManager = () => {
             setBarcodeStatus('Waiting for barcode...');
             barcodeModal.hidden = false;
             barcodeModal.setAttribute('aria-hidden', 'false');
-            window.setTimeout(() => {
-                barcodeInput.focus();
-                barcodeInput.select();
-            }, 50);
+            const preferredMode = readStoredBarcodeMode();
+            setBarcodeInputMode(preferredMode, {
+                focusKeyboard: preferredMode === 'keyboard',
+                persist: false,
+            });
         });
+    });
+
+    barcodeModeButtons.forEach((button) => {
+        button.addEventListener('click', (event) => {
+            event.preventDefault();
+            const mode = button.dataset.rfmBarcodeMode || 'keyboard';
+            setBarcodeInputMode(mode, { focusKeyboard: mode === 'keyboard', persist: true });
+            if (mode === 'keyboard') {
+                setBarcodeStatus('Waiting for barcode...');
+            }
+        });
+    });
+
+    barcodeCameraJump?.addEventListener('click', (event) => {
+        event.preventDefault();
+        setBarcodeInputMode('camera', { persist: true });
     });
 
     barcodeInput?.addEventListener('keydown', (event) => {
@@ -6108,7 +6296,7 @@ const initHairIntakeWizard = () => {
     const openBarcodeScanner = async (input) => {
         if (!input) return;
 
-        if (!('BarcodeDetector' in window) || !navigator.mediaDevices?.getUserMedia) {
+        if (!cameraBarcodeSupported()) {
             input.focus();
             showToast('Camera barcode scanning is not supported here. Use your scanner or type the code.');
             return;
@@ -6130,50 +6318,35 @@ const initHairIntakeWizard = () => {
 
         const video = overlay.querySelector('video');
         const cancel = overlay.querySelector('button');
-        let stream = null;
-        let timer = null;
-        let closed = false;
+
+        const session = createCameraBarcodeSession({
+            video,
+            onDetected: (value) => {
+                input.value = value;
+                input.dispatchEvent(new Event('input', { bubbles: true }));
+                showToast('Barcode scanned.');
+                session.close();
+                overlay.remove();
+                input.focus();
+            },
+            onError: (message) => {
+                showToast(message, true);
+                session.close();
+                overlay.remove();
+                input.focus();
+            },
+        });
 
         const close = () => {
-            if (closed) return;
-            closed = true;
-            window.clearInterval(timer);
-            stream?.getTracks?.().forEach((track) => track.stop());
+            session.close();
             overlay.remove();
             input.focus();
         };
 
         cancel.addEventListener('click', close);
-
-        try {
-            stream = await navigator.mediaDevices.getUserMedia({
-                video: { facingMode: { ideal: 'environment' } },
-                audio: false,
-            });
-            video.srcObject = stream;
-            const detector = new window.BarcodeDetector({
-                formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128'],
-            });
-
-            timer = window.setInterval(async () => {
-                if (closed || video.readyState < 2) return;
-                try {
-                    const codes = await detector.detect(video);
-                    const value = codes?.[0]?.rawValue || '';
-                    if (value) {
-                        input.value = value;
-                        input.dispatchEvent(new Event('input', { bubbles: true }));
-                        showToast('Barcode scanned.');
-                        close();
-                    }
-                } catch {
-                    close();
-                    showToast('Barcode scanning failed. Use your scanner or type the code.', true);
-                }
-            }, 500);
-        } catch {
+        const started = await session.start();
+        if (!started) {
             close();
-            showToast('Camera permission was blocked. Use your scanner or type the code.', true);
         }
     };
 

@@ -1672,10 +1672,59 @@
                     </div>
                     <button type="button" class="rfm-barcode-close" data-rfm-barcode-close aria-label="Close">×</button>
                 </header>
-                <label class="rfm-barcode-field">
-                    <span>Scan or type barcode</span>
-                    <input type="text" inputmode="numeric" autocomplete="off" data-rfm-barcode-input placeholder="Scan now…">
-                </label>
+                <div class="rfm-barcode-mode" role="tablist" aria-label="Barcode input mode" data-rfm-barcode-mode-tabs hidden>
+                    <button type="button"
+                            class="rfm-barcode-mode-btn is-active"
+                            role="tab"
+                            aria-selected="true"
+                            data-rfm-barcode-mode="keyboard">
+                        Scanner / type
+                    </button>
+                    <button type="button"
+                            class="rfm-barcode-mode-btn"
+                            role="tab"
+                            aria-selected="false"
+                            data-rfm-barcode-mode="camera">
+                        Camera
+                    </button>
+                </div>
+
+                <div class="rfm-barcode-keyboard" data-rfm-barcode-keyboard-panel>
+                    <label class="rfm-barcode-field">
+                        <span>Scan or type barcode</span>
+                        <div class="rfm-barcode-input-row">
+                            <input type="text"
+                                   inputmode="numeric"
+                                   autocomplete="off"
+                                   data-rfm-barcode-input
+                                   placeholder="Scan now…">
+                            <button type="button"
+                                    class="rfm-barcode-camera-jump"
+                                    data-rfm-barcode-camera-jump
+                                    hidden
+                                    aria-label="Switch to camera scanner">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                                    <circle cx="12" cy="13" r="4"/>
+                                </svg>
+                            </button>
+                        </div>
+                    </label>
+                    <p class="rfm-barcode-hint" data-rfm-barcode-keyboard-hint>
+                        Use a USB or Bluetooth scanner, or type the code. No scanner? Tap the camera button.
+                    </p>
+                </div>
+
+                <div class="rfm-barcode-camera" data-rfm-barcode-camera-panel hidden>
+                    <div class="rfm-barcode-camera-view">
+                        <video autoplay playsinline muted data-rfm-barcode-video></video>
+                    </div>
+                    <p class="rfm-barcode-camera-hint">Point at the barcode — saves automatically when detected.</p>
+                    <button type="button" class="rfm-barcode-back-type" data-rfm-barcode-mode="keyboard">
+                        Use scanner or type instead
+                    </button>
+                </div>
+
                 <p class="rfm-barcode-status" data-rfm-barcode-status>Waiting for barcode…</p>
             </section>
         </div>

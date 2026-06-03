@@ -14030,7 +14030,7 @@
     }
 
     .rfm-barcode-field {
-        @apply mx-4 mt-4;
+        @apply mx-4 mt-3;
         @apply flex flex-col gap-2;
     }
 
@@ -14060,6 +14060,106 @@
     .rfm-barcode-status.is-error {
         background: #fff0f0;
         color: var(--color-danger);
+    }
+
+    .rfm-barcode-mode {
+        @apply mx-4 mt-4 grid grid-cols-2 gap-1 rounded-[14px] border p-1;
+        border-color: #e5dbc9;
+        background: #f5efe3;
+    }
+
+    .rfm-barcode-mode-btn {
+        @apply min-h-10 rounded-[10px] border-0 px-2 text-xs font-bold cursor-pointer;
+        background: transparent;
+        color: #6d665e;
+        transition: background 120ms ease, color 120ms ease, box-shadow 120ms ease;
+    }
+
+    .rfm-barcode-mode-btn.is-active {
+        background: #fffdf8;
+        color: var(--color-accent);
+        box-shadow: 0 1px 4px rgba(20, 18, 15, 0.08);
+    }
+
+    .rfm-barcode-input-row {
+        @apply flex items-stretch gap-2;
+    }
+
+    .rfm-barcode-input-row input {
+        @apply min-w-0 flex-1;
+    }
+
+    .rfm-barcode-camera-jump {
+        @apply inline-flex h-auto min-w-[3.25rem] shrink-0 items-center justify-center rounded-[16px] border px-3 cursor-pointer;
+        border-color: var(--color-accent);
+        background: var(--color-accent-soft);
+        color: var(--color-accent);
+    }
+
+    .rfm-barcode-camera-jump:hover,
+    .rfm-barcode-camera-jump:focus-visible {
+        background: var(--color-accent);
+        color: #fff;
+        outline: none;
+    }
+
+    .rfm-barcode-hint {
+        @apply mx-4 mb-1 text-xs leading-relaxed;
+        color: #7a7567;
+    }
+
+    .rfm-barcode-camera {
+        @apply mx-4 mt-3 flex flex-col gap-2;
+    }
+
+    .rfm-barcode-camera-view {
+        @apply relative overflow-hidden rounded-[16px] border bg-black;
+        border-color: #3d3830;
+        aspect-ratio: 4 / 3;
+    }
+
+    .rfm-barcode-camera-view video {
+        @apply h-full w-full object-cover;
+    }
+
+    .rfm-barcode-camera-hint {
+        @apply m-0 text-xs font-semibold leading-relaxed;
+        color: #6d665e;
+    }
+
+    .rfm-barcode-back-type {
+        @apply min-h-10 w-full rounded-[12px] border px-3 text-sm font-semibold cursor-pointer;
+        border-color: #e5dbc9;
+        background: #fffdf8;
+        color: var(--color-ink);
+    }
+
+    .rfm-barcode-panel:has([data-rfm-barcode-camera-panel]:not([hidden])) {
+        max-height: min(92vh, 36rem);
+    }
+
+    .hew-scanner {
+        @apply fixed inset-0 z-[140] flex items-end justify-center bg-black/55 p-4 sm:items-center;
+    }
+
+    .hew-scanner-panel {
+        @apply w-full max-w-md rounded-[20px] border bg-white p-4 shadow-xl;
+        border-color: #e5dbc9;
+    }
+
+    .hew-scanner-panel h2 {
+        @apply m-0 mb-1 text-base font-bold;
+        color: var(--color-ink);
+    }
+
+    .hew-scanner-panel video {
+        @apply mt-3 w-full rounded-[12px] bg-black;
+        aspect-ratio: 4 / 3;
+        object-fit: cover;
+    }
+
+    .hew-scanner-panel .hew-actions {
+        @apply mt-3 flex justify-end;
     }
 
 
