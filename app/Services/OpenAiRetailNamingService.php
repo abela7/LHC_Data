@@ -11,41 +11,133 @@ use RuntimeException;
 
 class OpenAiRetailNamingService
 {
-    public function __construct(private readonly HttpFactory $http)
-    {
-    }
+    private const CHUNK_SIZE = 20;
+
+    public function __construct(private readonly HttpFactory $http) {}
 
     /**
      * @return array<string, mixed>
      */
     public function suggest(ProductFamily $family, ?string $requestedModel = null): array
     {
-        $apiKey = (string) config('services.openai.api_key');
-        if ($apiKey === '') {
-            throw new RuntimeException('OpenAI API key is missing. Add OPENAI_API_KEY to .env.');
+        $this->loadFamilyRelations($family);
+
+        if ($family->products->isEmpty()) {
+            throw new RuntimeException('This family has no sellable products to name yet.');
         }
 
-        $family->loadMissing([
-            'brand',
-            'catalogueStyle',
-            'categoryAssignments.scaffold',
-            'categoryAssignments.axis',
-            'categoryAssignments.node.parent',
-            'variantGroups.options',
-            'products.posProfile',
-            'products.ecommerceProfile',
-            'products.variantValues.group',
-            'products.variantValues.option',
-        ]);
+        $model = trim((string) $requestedModel) ?: (string) config('services.openai.retail_naming_model', 'gpt-5-nano');
 
-        $model = trim((string) $requestedModel) ?: (string) config('services.openai.retail_naming_model', 'gpt-5.5');
-        $prompt = $this->prompt($family);
+        if ($family->products->count() > self::CHUNK_SIZE) {
+            return $this->suggestInChunks($family, $model);
+        }
+
+        return $this->suggestForProducts($family, $family->products, $model);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function suggestInChunks(ProductFamily $family, string $model): array
+    {
+        $chunks = $family->products->chunk(self::CHUNK_SIZE);
+        $suggestions = [];
+        $warnings = [
+            'Large family: naming was generated in '.$chunks->count().' batches of up to '.self::CHUNK_SIZE.' SKUs.',
+        ];
+        $resolvedModel = $model;
+        $promptHashes = [];
+
+        foreach ($chunks as $index => $chunk) {
+            $batch = $this->suggestForProducts($family, $chunk->values(), $model);
+            $resolvedModel = (string) ($batch['model'] ?? $resolvedModel);
+            $promptHashes[] = (string) ($batch['prompt_hash'] ?? '');
+            $suggestions = array_merge($suggestions, $batch['suggestions'] ?? []);
+            $warnings = array_merge($warnings, $this->stringList($batch['warnings'] ?? []));
+        }
+
+        $expectedIds = $family->products->pluck('id')->map(fn ($id): int => (int) $id)->values();
+        $actualIds = collect($suggestions)->pluck('product_id')->map(fn ($id): int => (int) $id)->values();
+        $missingCount = $expectedIds->diff($actualIds)->count();
+
+        if ($missingCount > 0) {
+            $warnings[] = 'AI did not return suggestions for '.$missingCount.' sellable product'.($missingCount === 1 ? '' : 's').'.';
+        }
+
+        return [
+            'model' => $resolvedModel,
+            'provider' => 'openai',
+            'prompt_hash' => hash('sha256', implode('|', $promptHashes)),
+            'family_id' => $family->id,
+            'rules' => [
+                'receipt_name_max' => 35,
+                'inventory_name_max' => 80,
+                'ecommerce_title_max' => 150,
+            ],
+            'warnings' => collect($warnings)->unique()->values()->all(),
+            'suggestions' => $suggestions,
+            'raw_response' => null,
+        ];
+    }
+
+    /**
+     * @param  Collection<int, Product>|iterable<int, Product>  $products
+     * @return array<string, mixed>
+     */
+    private function suggestForProducts(ProductFamily $family, iterable $products, string $model): array
+    {
+        $productCollection = $products instanceof Collection ? $products : collect($products);
+        $prompt = $this->prompt($family, $productCollection);
+        $payload = $this->requestNamingPayload($prompt, $model, $productCollection->count());
+        $result = $this->decodeResult($payload);
+        $suggestions = $this->normaliseSuggestions($result['suggestions'] ?? [], $family);
+        $warnings = $this->stringList($result['warnings'] ?? []);
+        $expectedIds = $productCollection->pluck('id')->map(fn ($id): int => (int) $id)->values();
+        $actualIds = collect($suggestions)->pluck('product_id')->map(fn ($id): int => (int) $id)->values();
+        $missingCount = $expectedIds->diff($actualIds)->count();
+
+        if ($missingCount > 0) {
+            $warnings[] = 'AI did not return suggestions for '.$missingCount.' sellable product'.($missingCount === 1 ? '' : 's').'.';
+        }
+
+        return [
+            'model' => (string) data_get($payload, 'model', $model),
+            'provider' => 'openai',
+            'prompt_hash' => hash('sha256', $prompt),
+            'family_id' => $family->id,
+            'rules' => [
+                'receipt_name_max' => 35,
+                'inventory_name_max' => 80,
+                'ecommerce_title_max' => 150,
+            ],
+            'warnings' => $warnings,
+            'suggestions' => $suggestions,
+            'raw_response' => json_encode($payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES),
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function requestNamingPayload(string $prompt, string $model, int $productCount): array
+    {
+        $apiKey = (string) config('services.openai.api_key');
+        if ($apiKey === '') {
+            throw new RuntimeException('OpenAI API key is missing. Add OPENAI_API_KEY to .env on the server.');
+        }
 
         $body = [
             'model' => $model,
             'instructions' => 'You are a precise retail PIM naming assistant for a UK beauty and hair-extension shop. Return only valid JSON that matches the requested schema.',
-            'input' => $prompt,
-            'max_output_tokens' => 2200,
+            'input' => [
+                [
+                    'role' => 'user',
+                    'content' => [
+                        ['type' => 'input_text', 'text' => $prompt],
+                    ],
+                ],
+            ],
+            'max_output_tokens' => $this->maxOutputTokensForCount($productCount),
             'reasoning' => [
                 'effort' => 'minimal',
             ],
@@ -95,8 +187,9 @@ class OpenAiRetailNamingService
             $headers['OpenAI-Project'] = (string) env('OPENAI_PROJECT_ID');
         }
 
+        $timeout = max(60, (int) config('services.openai.timeout', 60));
         $response = $this->http
-            ->timeout((int) config('services.openai.timeout', 60))
+            ->timeout($timeout)
             ->retry(1, 500)
             ->withToken($apiKey)
             ->withHeaders($headers)
@@ -110,34 +203,56 @@ class OpenAiRetailNamingService
         }
 
         $payload = $response->json();
-        $result = $this->decodeResult($payload);
-        $suggestions = $this->normaliseSuggestions($result['suggestions'] ?? [], $family);
-        $warnings = $this->stringList($result['warnings'] ?? []);
-        $expectedIds = $family->products->pluck('id')->map(fn ($id): int => (int) $id)->values();
-        $actualIds = collect($suggestions)->pluck('product_id')->map(fn ($id): int => (int) $id)->values();
-        $missingCount = $expectedIds->diff($actualIds)->count();
+        $this->assertSuccessfulResponse($payload);
 
-        if ($missingCount > 0) {
-            $warnings[] = 'AI did not return suggestions for '.$missingCount.' sellable product'.($missingCount === 1 ? '' : 's').'.';
-        }
-
-        return [
-            'model' => (string) data_get($payload, 'model', $model),
-            'provider' => 'openai',
-            'prompt_hash' => hash('sha256', $prompt),
-            'family_id' => $family->id,
-            'rules' => [
-                'receipt_name_max' => 35,
-                'inventory_name_max' => 80,
-                'ecommerce_title_max' => 150,
-            ],
-            'warnings' => $warnings,
-            'suggestions' => $suggestions,
-            'raw_response' => json_encode($payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES),
-        ];
+        return is_array($payload) ? $payload : [];
     }
 
-    private function prompt(ProductFamily $family): string
+    private function maxOutputTokensForCount(int $productCount): int
+    {
+        return min(16000, max(2500, 700 + ($productCount * 180)));
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function assertSuccessfulResponse(array $payload): void
+    {
+        $status = (string) data_get($payload, 'status', '');
+
+        if ($status === 'failed') {
+            $message = (string) data_get($payload, 'error.message', 'Unknown OpenAI error.');
+            throw new RuntimeException('OpenAI naming suggestion failed: '.Str::limit($message, 500, ''));
+        }
+
+        if ($status === 'incomplete') {
+            $reason = (string) data_get($payload, 'incomplete_details.reason', 'max_output_tokens');
+            throw new RuntimeException(
+                'OpenAI naming response was incomplete ('.$reason.'). Try again; very large families are processed in batches automatically.'
+            );
+        }
+    }
+
+    private function loadFamilyRelations(ProductFamily $family): void
+    {
+        $family->loadMissing([
+            'brand',
+            'catalogueStyle',
+            'categoryAssignments.scaffold',
+            'categoryAssignments.axis',
+            'categoryAssignments.node.parent',
+            'variantGroups.options',
+            'products.posProfile',
+            'products.ecommerceProfile',
+            'products.variantValues.group',
+            'products.variantValues.option',
+        ]);
+    }
+
+    /**
+     * @param  Collection<int, Product>|null  $productsSubset
+     */
+    private function prompt(ProductFamily $family, ?Collection $productsSubset = null): string
     {
         $variantAnalysis = $this->variantAnalysis($family);
         $consumerStyleName = $this->consumerStyleName($family);
@@ -209,7 +324,7 @@ class OpenAiRetailNamingService
                     ])->values()->all(),
                 ])->values()->all(),
             ],
-            'sellable_products' => $family->products->map(function (Product $product) use ($variantAnalysis): array {
+            'sellable_products' => ($productsSubset ?? $family->products)->map(function (Product $product) use ($variantAnalysis): array {
                 $variants = $product->variantValues
                     ->sortBy(fn ($value) => sprintf('%04d:%s', $value->group?->sort_order ?? 0, $value->option?->label ?? ''))
                     ->map(function ($value) use ($variantAnalysis): array {
@@ -383,14 +498,19 @@ PROMPT);
         }
 
         if (! is_array($decoded)) {
-            throw new RuntimeException('OpenAI returned non-JSON naming suggestions.');
+            $status = (string) data_get($payload, 'status', 'unknown');
+            $snippet = Str::limit($clean, 240, '');
+
+            throw new RuntimeException(
+                'OpenAI returned non-JSON naming suggestions (status: '.$status.').'
+                .($snippet !== '' ? ' Response started: '.$snippet : '')
+            );
         }
 
         return $decoded;
     }
 
     /**
-     * @param  mixed  $suggestions
      * @return array<int, array<string, mixed>>
      */
     private function normaliseSuggestions(mixed $suggestions, ProductFamily $family): array

@@ -3447,9 +3447,18 @@ const initRetailFamilyManager = () => {
                 body: payload,
                 headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
             });
-            const data = await response.json().catch(() => ({}));
+            const rawText = await response.text();
+            let data = {};
+            try {
+                data = rawText ? JSON.parse(rawText) : {};
+            } catch {
+                data = {};
+            }
             if (!response.ok) {
-                const message = data.message || Object.values(data.errors || {}).flat()[0] || 'Unable to generate naming suggestions.';
+                const message = data.message
+                    || Object.values(data.errors || {}).flat()[0]
+                    || (rawText && !rawText.startsWith('<') ? rawText.slice(0, 240) : '')
+                    || `Unable to generate naming suggestions (HTTP ${response.status}).`;
                 throw new Error(message);
             }
 

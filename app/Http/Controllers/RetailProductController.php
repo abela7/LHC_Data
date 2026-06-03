@@ -2,10 +2,10 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\InventoryLocation;
-use App\Models\InventorySection;
 use App\Models\BrandCatalogueSku;
 use App\Models\BrandCatalogueVariantOption;
+use App\Models\InventoryLocation;
+use App\Models\InventorySection;
 use App\Models\Product;
 use App\Models\ProductCategoryAssignment;
 use App\Models\ProductEcommerceProfile;
@@ -14,8 +14,8 @@ use App\Models\ProductPosProfile;
 use App\Models\ProductPrice;
 use App\Models\ProductSource;
 use App\Models\ProductVariantGroup;
-use App\Models\ProductVariantOption;
 use App\Models\ProductVariantGroupType;
+use App\Models\ProductVariantOption;
 use App\Models\ProductVariantValue;
 use App\Services\HairIntakeBarcodeService;
 use App\Services\OpenAiRetailNamingService;
@@ -26,6 +26,7 @@ use App\Support\HairExtensionLengthLabel;
 use App\Support\RetailFamilySkuGrouper;
 use App\Support\VariantNaturalSort;
 use Illuminate\Contracts\View\View;
+use Illuminate\Database\Query\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -275,7 +276,7 @@ class RetailProductController extends Controller
 
         // Shared location/section: use the first product's level values if all products share the same.
         $sharedLocationId = $this->sharedIntValue($products, fn (Product $product) => $product->inventoryLevels->first()?->inventory_location_id);
-        $sharedSectionId  = $this->sharedIntValue($products, fn (Product $product) => $product->inventoryLevels->first()?->inventory_section_id);
+        $sharedSectionId = $this->sharedIntValue($products, fn (Product $product) => $product->inventoryLevels->first()?->inventory_section_id);
 
         $familySharedDetails = [
             'retail_price' => $this->sharedDecimalValue($products, fn (Product $product) => $product->price?->retail_price),
@@ -440,6 +441,7 @@ class RetailProductController extends Controller
             $signature = collect($combo)->map(fn (ProductVariantOption $o): int => (int) $o->id)->sort()->values()->implode(',');
             if (isset($existingSignatures[$signature])) {
                 $skippedExisting++;
+
                 continue;
             }
 
@@ -451,6 +453,7 @@ class RetailProductController extends Controller
 
             if ($product === null) {
                 $skippedConflict++;
+
                 continue;
             }
 
@@ -548,6 +551,7 @@ class RetailProductController extends Controller
 
             if (isset($existingSignatures[$signature])) {
                 $skippedExisting++;
+
                 continue;
             }
 
@@ -555,6 +559,7 @@ class RetailProductController extends Controller
 
             if ($product === null) {
                 $skippedConflict++;
+
                 continue;
             }
 
@@ -630,6 +635,7 @@ class RetailProductController extends Controller
             $signature = collect($combo)->map(fn (ProductVariantOption $o): int => (int) $o->id)->sort()->values()->implode(',');
             if (isset($existingSignatures[$signature])) {
                 $skippedExisting++;
+
                 continue;
             }
 
@@ -641,6 +647,7 @@ class RetailProductController extends Controller
 
             if ($product === null) {
                 $skippedConflict++;
+
                 continue;
             }
 
@@ -709,6 +716,7 @@ class RetailProductController extends Controller
                             'variant_options' => "This catalogue SKU is already linked to {$existingCatalogueProduct->name}.",
                         ]);
                     }
+
                     return null;
                 }
             }
@@ -877,6 +885,7 @@ class RetailProductController extends Controller
                 ->implode(',');
             $signatures[$signature] = true;
         }
+
         return $signatures;
     }
 
@@ -1105,7 +1114,7 @@ class RetailProductController extends Controller
             && ! empty($data['inventory_location_id']);
 
         $targetLocationId = null;
-        $locationUpdates  = [];
+        $locationUpdates = [];
         if ($applyLocation) {
             $chosenLocation = InventoryLocation::find((int) $data['inventory_location_id']);
             if ($chosenLocation) {
@@ -1822,7 +1831,13 @@ class RetailProductController extends Controller
             'ai_model' => ['nullable', 'string', 'max:255'],
         ]);
 
-        $result = $naming->suggest($family, $data['ai_model'] ?? null);
+        try {
+            $result = $naming->suggest($family, $data['ai_model'] ?? null);
+        } catch (\RuntimeException $exception) {
+            return response()->json([
+                'message' => $exception->getMessage(),
+            ], 422);
+        }
 
         return response()->json([
             'message' => 'AI naming suggestions ready.',
@@ -2055,11 +2070,11 @@ class RetailProductController extends Controller
         return $values->count() === 1 ? $values->first() : null;
     }
 
-    private function combinedRetailBrandGroups(): \Illuminate\Support\Collection
+    private function combinedRetailBrandGroups(): Collection
     {
         return $this->combinedRetailRowsWithPictures()
             ->groupBy(fn (object $row): string => $this->brandKey((string) $row->brand_name))
-            ->map(function (\Illuminate\Support\Collection $rows, string $key): array {
+            ->map(function (Collection $rows, string $key): array {
                 $sourceNames = $rows->pluck('brand_name')
                     ->filter()
                     ->unique(fn (string $name): string => Str::lower($name))
@@ -2103,12 +2118,12 @@ class RetailProductController extends Controller
             ->values();
     }
 
-    private function combinedRetailFamilyGroups(string $brandKey): \Illuminate\Support\Collection
+    private function combinedRetailFamilyGroups(string $brandKey): Collection
     {
         return $this->combinedRetailRowsWithPictures()
             ->filter(fn (object $row): bool => $this->brandKey((string) $row->brand_name) === $brandKey)
             ->groupBy(fn (object $row): string => $this->familyKey((string) $row->family_name))
-            ->map(function (\Illuminate\Support\Collection $rows, string $key): array {
+            ->map(function (Collection $rows, string $key): array {
                 $familyName = $rows->pluck('family_name')
                     ->filter()
                     ->sortByDesc(fn (string $name): int => $rows->where('family_name', $name)->count())
@@ -2154,14 +2169,14 @@ class RetailProductController extends Controller
             ->values();
     }
 
-    private function combinedRetailRowsWithPictures(): \Illuminate\Support\Collection
+    private function combinedRetailRowsWithPictures(): Collection
     {
         return $this->combinedRetailSourceRows()
             ->concat($this->pictureRetailSourceRows())
             ->values();
     }
 
-    private function combinedRetailSourceRows(): \Illuminate\Support\Collection
+    private function combinedRetailSourceRows(): Collection
     {
         return DB::table('product_sources as ps')
             ->join('product_families as pf', 'pf.id', '=', 'ps.product_family_id')
@@ -2185,7 +2200,7 @@ class RetailProductController extends Controller
             ->get();
     }
 
-    private function pictureRetailSourceRows(): \Illuminate\Support\Collection
+    private function pictureRetailSourceRows(): Collection
     {
         return DB::table('observed_products as op')
             ->leftJoin('categories as c', 'c.id', '=', 'op.category_id')
@@ -2249,7 +2264,7 @@ class RetailProductController extends Controller
         };
     }
 
-    private function retailFamilyQuery($sourceType): \Illuminate\Database\Query\Builder
+    private function retailFamilyQuery($sourceType): Builder
     {
         $productImageCounts = DB::table('product_media')
             ->select('product_id', DB::raw('count(*) as image_count'))
@@ -2326,7 +2341,7 @@ class RetailProductController extends Controller
         ];
     }
 
-    private function retailProductBrands($sourceType): \Illuminate\Support\Collection
+    private function retailProductBrands($sourceType): Collection
     {
         $query = DB::table('product_sources as ps')
             ->join('product_families as pf', 'pf.id', '=', 'ps.product_family_id')
@@ -2345,7 +2360,7 @@ class RetailProductController extends Controller
             ->get();
     }
 
-    private function retailProductDepartments($sourceType): \Illuminate\Support\Collection
+    private function retailProductDepartments($sourceType): Collection
     {
         $query = DB::table('product_sources as ps')
             ->join('product_families as pf', 'pf.id', '=', 'ps.product_family_id')
@@ -2363,7 +2378,7 @@ class RetailProductController extends Controller
             ->get();
     }
 
-    private function retailProductTypes($sourceType): \Illuminate\Support\Collection
+    private function retailProductTypes($sourceType): Collection
     {
         $query = DB::table('product_sources as ps')
             ->join('product_families as pf', 'pf.id', '=', 'ps.product_family_id')
@@ -2384,7 +2399,7 @@ class RetailProductController extends Controller
             ->get();
     }
 
-    private function applySourceTypeFilter(\Illuminate\Database\Query\Builder $query, $sourceType): void
+    private function applySourceTypeFilter(Builder $query, $sourceType): void
     {
         if (is_array($sourceType)) {
             $query->whereIn('ps.source_type', $sourceType);
@@ -2397,7 +2412,7 @@ class RetailProductController extends Controller
         }
     }
 
-    private function departmentOptions(): \Illuminate\Support\Collection
+    private function departmentOptions(): Collection
     {
         $base = collect([
             'Hair Products',
@@ -2427,7 +2442,7 @@ class RetailProductController extends Controller
             ->values();
     }
 
-    private function productTypeOptions(): \Illuminate\Support\Collection
+    private function productTypeOptions(): Collection
     {
         $base = collect([
             'Body Lotion',
@@ -2692,6 +2707,7 @@ class RetailProductController extends Controller
 
             if ($rawOptionId === null || $rawOptionId === '') {
                 $errors["variant_options.{$group->id}"] = "Choose {$group->name}.";
+
                 continue;
             }
 
@@ -2699,6 +2715,7 @@ class RetailProductController extends Controller
 
             if (! $option instanceof ProductVariantOption) {
                 $errors["variant_options.{$group->id}"] = "The selected {$group->name} option does not belong to this family.";
+
                 continue;
             }
 

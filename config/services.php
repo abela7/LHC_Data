@@ -34,7 +34,7 @@ return [
 
     'openai' => [
         'api_key' => env('OPENAI_API_KEY'),
-        'retail_naming_model' => env('OPENAI_RETAIL_NAMING_MODEL', 'gpt-5.5'),
+        'retail_naming_model' => env('OPENAI_RETAIL_NAMING_MODEL', 'gpt-5-nano'),
         'timeout' => env('OPENAI_TIMEOUT', 60),
         'site_url' => env('OPENAI_SITE_URL', env('APP_URL', 'http://localhost')),
         'app_name' => env('OPENAI_APP_NAME', env('APP_NAME', 'LHC Data')),
