@@ -4544,7 +4544,7 @@ const initRetailFamilyManager = () => {
 
     root.querySelectorAll('.rfm-sku-group-summary').forEach((summary) => {
         summary.addEventListener('click', (event) => {
-            if (event.target.closest('[data-rfm-sku-bucket-delete], [data-rfm-sku-bucket-split-family]')) {
+            if (event.target.closest('.rfm-sku-group-actions, [data-rfm-sku-bucket-delete], [data-rfm-sku-bucket-split-family]')) {
                 event.preventDefault();
             }
         }, true);

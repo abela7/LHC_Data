@@ -1013,28 +1013,30 @@
                                     @endif
                                     <em class="rfm-sku-group-count">{{ $skuGroup['products']->count() }} SKU{{ $skuGroup['products']->count() === 1 ? '' : 's' }}</em>
                                     @if (! empty($skuGroup['option_id']))
-                                        <button type="button"
-                                                class="rfm-sku-group-new-family"
-                                                data-rfm-sku-bucket-split-family
-                                                data-rfm-action="{{ route('retail-products.families.variant-options.split-family', [$family, $skuGroup['option_id']]) }}"
-                                                data-rfm-bucket-axis="{{ $groupingGroup->name }}"
-                                                data-rfm-bucket-label="{{ $skuGroup['label'] }}"
-                                                data-rfm-sku-count="{{ $skuGroup['products']->count() }}"
-                                                aria-label="Move {{ $skuGroup['products']->count() }} SKUs into a new family for {{ $groupingGroup->name }}: {{ $skuGroup['label'] }}"
-                                                title="New family for this group (same brand and style)">
-                                            New family
-                                        </button>
-                                        <button type="button"
-                                                class="rfm-sku-group-delete"
-                                                data-rfm-sku-bucket-delete
-                                                data-rfm-action="{{ route('retail-products.families.variant-options.skus.destroy', [$family, $skuGroup['option_id']]) }}"
-                                                data-rfm-bucket-axis="{{ $groupingGroup->name }}"
-                                                data-rfm-bucket-label="{{ $skuGroup['label'] }}"
-                                                data-rfm-sku-count="{{ $skuGroup['products']->count() }}"
-                                                aria-label="Delete all {{ $skuGroup['products']->count() }} SKUs in {{ $groupingGroup->name }}: {{ $skuGroup['label'] }}"
-                                                title="Delete all SKUs in this group">
-                                            <span aria-hidden="true">×</span>
-                                        </button>
+                                        <span class="rfm-sku-group-actions">
+                                            <button type="button"
+                                                    class="rfm-sku-group-new-family"
+                                                    data-rfm-sku-bucket-split-family
+                                                    data-rfm-action="{{ route('retail-products.families.variant-options.split-family', [$family, $skuGroup['option_id']]) }}"
+                                                    data-rfm-bucket-axis="{{ $groupingGroup->name }}"
+                                                    data-rfm-bucket-label="{{ $skuGroup['label'] }}"
+                                                    data-rfm-sku-count="{{ $skuGroup['products']->count() }}"
+                                                    aria-label="New family for {{ $groupingGroup->name }}: {{ $skuGroup['label'] }} ({{ $skuGroup['products']->count() }} SKUs)"
+                                                    title="New family">
+                                                <span aria-hidden="true">+</span>
+                                            </button>
+                                            <button type="button"
+                                                    class="rfm-sku-group-delete"
+                                                    data-rfm-sku-bucket-delete
+                                                    data-rfm-action="{{ route('retail-products.families.variant-options.skus.destroy', [$family, $skuGroup['option_id']]) }}"
+                                                    data-rfm-bucket-axis="{{ $groupingGroup->name }}"
+                                                    data-rfm-bucket-label="{{ $skuGroup['label'] }}"
+                                                    data-rfm-sku-count="{{ $skuGroup['products']->count() }}"
+                                                    aria-label="Delete all SKUs in {{ $groupingGroup->name }}: {{ $skuGroup['label'] }}"
+                                                    title="Delete group">
+                                                <span aria-hidden="true">×</span>
+                                            </button>
+                                        </span>
                                     @endif
                                 </div>
                                 <span class="rfm-sku-group-chevron" aria-hidden="true">›</span>

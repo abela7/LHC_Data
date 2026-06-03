@@ -12051,8 +12051,12 @@
         color: var(--color-accent);
     }
 
+    .rfm-sku-group-actions {
+        @apply inline-flex shrink-0 items-center gap-1;
+    }
+
     .rfm-sku-group-new-family {
-        @apply shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-bold leading-none;
+        @apply inline-flex h-6 w-6 items-center justify-center rounded-full border text-base font-black leading-none;
         border-color: rgba(42, 92, 138, 0.22);
         background: #f5f9ff;
         color: #2a5c8a;
