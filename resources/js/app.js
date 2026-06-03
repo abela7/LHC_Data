@@ -77,7 +77,6 @@ const firstLaravelError = (payload) => {
     return errors[0] || '';
 };
 
-const RFM_BARCODE_MODE_KEY = 'rfm-barcode-input-mode';
 const BARCODE_CAMERA_DETECT_MS = 180;
 const BARCODE_CAMERA_CONFIRM_READS = 2;
 
@@ -4067,17 +4066,9 @@ const initRetailFamilyManager = () => {
         barcodeInput.dispatchEvent(new Event('input', { bubbles: true }));
     };
 
-    const setBarcodeInputMode = (mode, { focusKeyboard = false, persist = true } = {}) => {
+    const setBarcodeInputMode = (mode, { focusKeyboard = false } = {}) => {
         const nextMode = mode === 'camera' && cameraBarcodeAvailable() ? 'camera' : 'keyboard';
         barcodeInputMode = nextMode;
-
-        if (persist) {
-            try {
-                sessionStorage.setItem(RFM_BARCODE_MODE_KEY, nextMode);
-            } catch {
-                // ignore storage errors
-            }
-        }
 
         barcodeModeButtons.forEach((button) => {
             const active = button.dataset.rfmBarcodeMode === nextMode;
@@ -4105,12 +4096,12 @@ const initRetailFamilyManager = () => {
                     applyBarcodeInputValue(value);
                     setBarcodeStatus('Barcode confirmed. Saving…');
                     stopBarcodeCamera();
-                    setBarcodeInputMode('keyboard', { focusKeyboard: true, persist: true });
+                    setBarcodeInputMode('keyboard', { focusKeyboard: true });
                 },
                 onError: (message) => {
                     setBarcodeStatus(message, true);
                     showToast(message, true);
-                    setBarcodeInputMode('keyboard', { focusKeyboard: true, persist: false });
+                    setBarcodeInputMode('keyboard', { focusKeyboard: true });
                 },
             });
             barcodeCameraSession.start();
@@ -4123,14 +4114,6 @@ const initRetailFamilyManager = () => {
                 barcodeInput.focus();
                 barcodeInput.select();
             }, 50);
-        }
-    };
-
-    const readStoredBarcodeMode = () => {
-        try {
-            return sessionStorage.getItem(RFM_BARCODE_MODE_KEY) === 'camera' ? 'camera' : 'keyboard';
-        } catch {
-            return 'keyboard';
         }
     };
 
@@ -4155,7 +4138,7 @@ const initRetailFamilyManager = () => {
         barcodeModal.hidden = true;
         barcodeModal.setAttribute('aria-hidden', 'true');
         window.clearTimeout(barcodeTimer);
-        setBarcodeInputMode('keyboard', { focusKeyboard: false, persist: false });
+        setBarcodeInputMode('keyboard', { focusKeyboard: false });
     };
 
     const setBarcodeStatus = (message, isError = false) => {
@@ -4287,11 +4270,7 @@ const initRetailFamilyManager = () => {
             setBarcodeStatus('Waiting for barcode...');
             barcodeModal.hidden = false;
             barcodeModal.setAttribute('aria-hidden', 'false');
-            const preferredMode = readStoredBarcodeMode();
-            setBarcodeInputMode(preferredMode, {
-                focusKeyboard: preferredMode === 'keyboard',
-                persist: false,
-            });
+            setBarcodeInputMode('keyboard', { focusKeyboard: true });
         });
     });
 
@@ -4299,7 +4278,7 @@ const initRetailFamilyManager = () => {
         button.addEventListener('click', (event) => {
             event.preventDefault();
             const mode = button.dataset.rfmBarcodeMode || 'keyboard';
-            setBarcodeInputMode(mode, { focusKeyboard: mode === 'keyboard', persist: true });
+            setBarcodeInputMode(mode, { focusKeyboard: mode === 'keyboard' });
             if (mode === 'keyboard') {
                 setBarcodeStatus('Waiting for barcode...');
             }
@@ -4308,7 +4287,7 @@ const initRetailFamilyManager = () => {
 
     barcodeCameraJump?.addEventListener('click', (event) => {
         event.preventDefault();
-        setBarcodeInputMode('camera', { persist: true });
+        setBarcodeInputMode('camera');
     });
 
     barcodeInput?.addEventListener('keydown', (event) => {
