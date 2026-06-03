@@ -12043,6 +12043,25 @@
         color: var(--color-accent);
     }
 
+    .rfm-sku-group-delete {
+        @apply shrink-0 rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide;
+        border-color: #e8d4d4;
+        background: #fff8f8;
+        color: #9b4545;
+    }
+
+    .rfm-sku-group-delete:hover,
+    .rfm-sku-group-delete:focus-visible {
+        border-color: #d9b0b0;
+        background: #fdeeee;
+        color: #7a2f2f;
+    }
+
+    .rfm-sku-group-delete:disabled {
+        opacity: 0.55;
+        cursor: not-allowed;
+    }
+
     .rfm-sku-group-chevron {
         @apply flex h-7 w-7 items-center justify-center rounded-full text-base;
         grid-area: chevron;

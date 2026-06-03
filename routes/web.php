@@ -4,48 +4,49 @@ use App\Http\Controllers\AccessController;
 use App\Http\Controllers\BrandCatalogueController;
 use App\Http\Controllers\BrandCatalogueProductPublishController;
 use App\Http\Controllers\BrandController;
-use App\Http\Controllers\ProductController;
-use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\CatalogueFamilyController;
 use App\Http\Controllers\CatalogueImageController;
 use App\Http\Controllers\CatalogueSourceController;
 use App\Http\Controllers\CatalogueTypeController;
 use App\Http\Controllers\CatalogueVariantController;
+use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\CategoryScaffoldController;
+use App\Http\Controllers\DeliverooProductController;
 use App\Http\Controllers\ExportController;
 use App\Http\Controllers\ExternalBrandReportController;
 use App\Http\Controllers\HairExtensionIntakeController;
 use App\Http\Controllers\HairExtensionIntakeWizardController;
 use App\Http\Controllers\ImportController;
-use App\Http\Controllers\InvoiceGeneratorController;
 use App\Http\Controllers\InventoryStructureController;
-use App\Http\Controllers\DeliverooProductController;
+use App\Http\Controllers\InvoiceGeneratorController;
 use App\Http\Controllers\MamadoProductController;
 use App\Http\Controllers\MobileCaptureController;
 use App\Http\Controllers\MobileCaptureJobController;
-use App\Support\DeliverooBrands;
 use App\Http\Controllers\ObservedBrandMappingController;
 use App\Http\Controllers\ObservedPdfMatchController;
 use App\Http\Controllers\ObservedProductController;
 use App\Http\Controllers\PdfCatalogueProductController;
-use App\Http\Controllers\PdfSourceBrandDecisionController;
-use App\Http\Controllers\PictureManagementController;
-use App\Http\Controllers\RealBrandController;
 use App\Http\Controllers\PdfPictureBrandComparisonController;
+use App\Http\Controllers\PdfSourceBrandDecisionController;
 use App\Http\Controllers\PhotoProcessingSettingController;
+use App\Http\Controllers\PictureManagementController;
 use App\Http\Controllers\PictureOnlyProductController;
+use App\Http\Controllers\ProductController;
+use App\Http\Controllers\RealBrandController;
 use App\Http\Controllers\RealBrandProductController;
-use App\Http\Controllers\ReviewQueueController;
 use App\Http\Controllers\RetailProductController;
 use App\Http\Controllers\RetailProductExportController;
 use App\Http\Controllers\RetailProductMediaController;
-use App\Http\Controllers\ShopProductNormalizationController;
-use App\Http\Controllers\ShopProductIntakeController;
-use App\Http\Controllers\ShopPhotoController;
-use App\Http\Controllers\ShopPhotoBatchController;
+use App\Http\Controllers\ReviewQueueController;
 use App\Http\Controllers\ShabaReferenceController;
+use App\Http\Controllers\ShopPhotoBatchController;
+use App\Http\Controllers\ShopPhotoController;
+use App\Http\Controllers\ShopProductIntakeController;
+use App\Http\Controllers\ShopProductNormalizationController;
 use App\Http\Controllers\SourceProductController;
 use App\Http\Controllers\WatermarkSettingController;
+use App\Models\BrandCatalogue;
+use App\Support\DeliverooBrands;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/access', [AccessController::class, 'choose'])->name('access.choose');
@@ -209,6 +210,7 @@ Route::post('/retail-products/families/{family}/variant-options/{option}/create-
 Route::post('/retail-products/families/{family}/variant-options/create-skus-for-new', [RetailProductController::class, 'createSkusForNewVariantOptions'])->name('retail-products.families.variant-options.create-skus-for-new');
 Route::patch('/retail-products/families/{family}/variant-options/{option}', [RetailProductController::class, 'updateFamilyVariantOption'])->name('retail-products.families.variant-options.update');
 Route::delete('/retail-products/families/{family}/variant-options/{option}', [RetailProductController::class, 'destroyFamilyVariantOption'])->name('retail-products.families.variant-options.destroy');
+Route::delete('/retail-products/families/{family}/variant-options/{option}/skus', [RetailProductController::class, 'destroyFamilySkusForVariantOption'])->name('retail-products.families.variant-options.skus.destroy');
 Route::post('/retail-products/families/{family}/ai-naming/suggest', [RetailProductController::class, 'suggestFamilyNaming'])->name('retail-products.families.ai-naming.suggest');
 Route::post('/retail-products/families/{family}/ai-description/suggest', [RetailProductController::class, 'suggestFamilyDescription'])->name('retail-products.families.ai-description.suggest');
 Route::patch('/retail-products/families/{family}/ai-naming/apply', [RetailProductController::class, 'applyFamilyNaming'])->name('retail-products.families.ai-naming.apply');
@@ -257,7 +259,7 @@ Route::delete('/images/{image}', [CatalogueImageController::class, 'destroy'])->
 // Brand Catalogue
 Route::get('/brand-catalogue', [BrandCatalogueController::class, 'index'])->name('brand-catalogue.index');
 Route::get('/body-care-brand-catalogue', function () {
-    $catalogue = \App\Models\BrandCatalogue::query()
+    $catalogue = BrandCatalogue::query()
         ->where('slug', 'body-care')
         ->orWhere('id', 26)
         ->firstOrFail();

@@ -7,6 +7,7 @@ namespace App\Support;
 use App\Models\Product;
 use App\Models\ProductFamily;
 use App\Models\ProductVariantGroup;
+use App\Models\ProductVariantValue;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 
@@ -22,7 +23,7 @@ final class RetailFamilySkuGrouper
      *     grouping_group: ?ProductVariantGroup,
      *     shared_group_ids: Collection<int, int>,
      *     family_common_labels: Collection<int, string>,
-     *     sku_groups: Collection<int, array{label: string, sort_order: int, products: Collection<int, Product>}>,
+     *     sku_groups: Collection<int, array{label: string, option_id: ?int, sort_order: int, products: Collection<int, Product>}>,
      *     use_accordions: bool,
      * }
      */
@@ -66,6 +67,7 @@ final class RetailFamilySkuGrouper
                 if (! $skuGroups->has($groupKey)) {
                     $skuGroups->put($groupKey, [
                         'label' => $groupLabel,
+                        'option_id' => $option?->id,
                         'sort_order' => (int) ($option?->sort_order ?? 9999),
                         'sort_key' => VariantNaturalSort::valueKey($groupLabel),
                         'products' => collect(),
@@ -88,6 +90,7 @@ final class RetailFamilySkuGrouper
         } else {
             $skuGroups = collect([[
                 'label' => $family->family_name,
+                'option_id' => null,
                 'sort_order' => 0,
                 'sort_key' => '0',
                 'products' => $products
@@ -106,7 +109,7 @@ final class RetailFamilySkuGrouper
     }
 
     /**
-     * @param  Collection<int, \App\Models\ProductVariantValue>  $allVariantValues
+     * @param  Collection<int, ProductVariantValue>  $allVariantValues
      * @param  Collection<int, int>  $sharedGroupIds
      */
     private static function resolveGroupingGroup(
@@ -135,7 +138,7 @@ final class RetailFamilySkuGrouper
     }
 
     /**
-     * @param  Collection<int, \App\Models\ProductVariantValue>  $allVariantValues
+     * @param  Collection<int, ProductVariantValue>  $allVariantValues
      * @param  Collection<int, int>  $sharedGroupIds
      */
     private static function scoreGroupingCandidate(
@@ -200,7 +203,7 @@ final class RetailFamilySkuGrouper
     }
 
     /**
-     * @param  Collection<int, \App\Models\ProductVariantValue>  $allVariantValues
+     * @param  Collection<int, ProductVariantValue>  $allVariantValues
      */
     private static function distinctOptionCount(Collection $allVariantValues, int $groupId): int
     {
@@ -210,5 +213,4 @@ final class RetailFamilySkuGrouper
             ->unique()
             ->count();
     }
-
 }

@@ -173,15 +173,7 @@ class RetailProductController extends Controller
         $label = $product->inventory_name ?: $product->name;
 
         DB::transaction(function () use ($product): void {
-            $product->load('media');
-
-            foreach ($product->media as $media) {
-                if ($media->catalogue_image_id === null && $media->storage_disk && $media->storage_path) {
-                    Storage::disk($media->storage_disk)->delete($media->storage_path);
-                }
-            }
-
-            $product->delete();
+            $this->deleteSellableProduct($product);
         });
 
         if ($request->expectsJson()) {
@@ -1486,31 +1478,88 @@ class RetailProductController extends Controller
     }
 
     /**
-     * Remove an unused variant axis from this family.
-     * Refuses deletion when any SKU still stores a value for the group.
+     * Remove a variant axis from this family.
+     * Permanently deletes every sellable SKU that still stores a value on this axis.
      */
     public function destroyFamilyVariantGroup(ProductFamily $family, ProductVariantGroup $group): RedirectResponse
     {
         $group = $this->familyVariantGroup($family, (int) $group->id);
 
-        $inUseCount = ProductVariantValue::query()
-            ->where('product_variant_group_id', $group->id)
-            ->count();
-
-        if ($inUseCount > 0) {
-            throw ValidationException::withMessages([
-                'variant_group' => "Cannot delete \"{$group->name}\" because {$inUseCount} sellable SKU"
-                    .($inUseCount === 1 ? ' uses' : 's use').' it. Remove or edit those SKUs first.',
-            ]);
-        }
-
+        $products = $this->familyProductsUsingVariantGroup($family, $group);
+        $skuCount = $products->count();
         $name = $group->name;
         $optionCount = $group->options()->count();
-        $group->delete();
+
+        DB::transaction(function () use ($products, $group): void {
+            foreach ($products as $product) {
+                $this->deleteSellableProduct($product);
+            }
+
+            $group->delete();
+        });
+
+        $status = $skuCount > 0
+            ? "Removed variant group \"{$name}\", {$optionCount} value".($optionCount === 1 ? '' : 's')
+                .", and {$skuCount} sellable SKU".($skuCount === 1 ? '' : 's').'.'
+            : "Removed variant group \"{$name}\" and {$optionCount} unused value".($optionCount === 1 ? '' : 's').'.';
 
         return redirect()
             ->to(route('retail-products.families.show', $family).'#rfm-variant-model')
-            ->with('status', "Removed variant group \"{$name}\" and {$optionCount} unused value".($optionCount === 1 ? '' : 's').'.');
+            ->with('status', $status);
+    }
+
+    /**
+     * Permanently delete every sellable SKU in this family that uses a variant option
+     * (e.g. all SKUs grouped under Length 16").
+     */
+    public function destroyFamilySkusForVariantOption(
+        Request $request,
+        ProductFamily $family,
+        ProductVariantOption $option,
+    ): JsonResponse|RedirectResponse {
+        $option = $this->familyVariantOption($family, (int) $option->id);
+        $group = $this->familyVariantGroup($family, (int) $option->product_variant_group_id);
+
+        $products = $this->familyProductsUsingVariantOption($family, $option);
+        $skuCount = $products->count();
+        $label = $option->label;
+
+        if ($skuCount === 0) {
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'message' => "No sellable SKUs use {$group->name}: {$label}.",
+                    'deleted_count' => 0,
+                    'option_id' => $option->id,
+                    'family_id' => $family->id,
+                ]);
+            }
+
+            return redirect()
+                ->to(route('retail-products.families.show', $family).'#rfm-skus-workspace')
+                ->with('status', "No sellable SKUs use {$group->name}: {$label}.");
+        }
+
+        DB::transaction(function () use ($products): void {
+            foreach ($products as $product) {
+                $this->deleteSellableProduct($product);
+            }
+        });
+
+        $message = "Removed {$skuCount} sellable SKU".($skuCount === 1 ? '' : 's')
+            ." for {$group->name}: {$label}.";
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'message' => $message,
+                'deleted_count' => $skuCount,
+                'option_id' => $option->id,
+                'family_id' => $family->id,
+            ]);
+        }
+
+        return redirect()
+            ->to(route('retail-products.families.show', $family).'#rfm-skus-workspace')
+            ->with('status', $message);
     }
 
     /**
@@ -1807,6 +1856,44 @@ class RetailProductController extends Controller
     }
 
     /**
+     * Permanently remove one sellable SKU and its stored media files.
+     */
+    private function deleteSellableProduct(Product $product): void
+    {
+        $product->loadMissing('media');
+
+        foreach ($product->media as $media) {
+            if ($media->catalogue_image_id === null && $media->storage_disk && $media->storage_path) {
+                Storage::disk($media->storage_disk)->delete($media->storage_path);
+            }
+        }
+
+        $product->delete();
+    }
+
+    /**
+     * @return Collection<int, Product>
+     */
+    private function familyProductsUsingVariantGroup(ProductFamily $family, ProductVariantGroup $group): Collection
+    {
+        return Product::query()
+            ->where('product_family_id', $family->id)
+            ->whereHas('variantValues', fn ($query) => $query->where('product_variant_group_id', $group->id))
+            ->get();
+    }
+
+    /**
+     * @return Collection<int, Product>
+     */
+    private function familyProductsUsingVariantOption(ProductFamily $family, ProductVariantOption $option): Collection
+    {
+        return Product::query()
+            ->where('product_family_id', $family->id)
+            ->whereHas('variantValues', fn ($query) => $query->where('product_variant_option_id', $option->id))
+            ->get();
+    }
+
+    /**
      * Resolve a variant group by id and ensure it belongs to this family.
      */
     private function familyVariantGroup(ProductFamily $family, int $groupId): ProductVariantGroup
@@ -1823,6 +1910,25 @@ class RetailProductController extends Controller
         }
 
         return $group;
+    }
+
+    /**
+     * Resolve a variant option and ensure its group belongs to this family.
+     */
+    private function familyVariantOption(ProductFamily $family, int $optionId): ProductVariantOption
+    {
+        $option = ProductVariantOption::query()
+            ->where('id', $optionId)
+            ->whereHas('group', fn ($query) => $query->where('product_family_id', $family->id))
+            ->first();
+
+        if (! $option) {
+            throw ValidationException::withMessages([
+                'product_variant_option_id' => 'That variant value does not belong to this family.',
+            ]);
+        }
+
+        return $option;
     }
 
     public function suggestFamilyNaming(Request $request, ProductFamily $family, OpenAiRetailNamingService $naming): JsonResponse

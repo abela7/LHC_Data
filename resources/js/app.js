@@ -4596,6 +4596,64 @@ const initRetailFamilyManager = () => {
         });
     });
 
+    root.querySelectorAll('[data-rfm-sku-bucket-delete]').forEach((btn) => {
+        btn.addEventListener('click', async (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+
+            const axis = btn.dataset.rfmBucketAxis || 'Variant';
+            const label = btn.dataset.rfmBucketLabel || '';
+            const count = Number.parseInt(btn.dataset.rfmSkuCount || '0', 10) || 0;
+            const bucketLabel = label ? `${axis}: ${label}` : axis;
+            const skuWord = count === 1 ? 'SKU' : 'SKUs';
+            if (!window.confirm(
+                `Delete all ${count} ${skuWord} in ${bucketLabel}? This permanently removes each sellable product and cannot be undone.`,
+            )) {
+                return;
+            }
+
+            const action = btn.dataset.rfmAction || '';
+            if (!action) {
+                return;
+            }
+
+            const skuGroup = btn.closest('[data-rfm-sku-group]');
+            btn.disabled = true;
+
+            try {
+                const formData = new FormData();
+                formData.append('_token', csrf);
+                formData.append('_method', 'DELETE');
+
+                const response = await fetch(action, {
+                    method: 'POST',
+                    headers: {
+                        Accept: 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest',
+                    },
+                    body: formData,
+                });
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok) {
+                    throw new Error(data.message || 'Unable to delete SKU group.');
+                }
+
+                skuGroup?.remove();
+
+                const remainingGroups = root.querySelectorAll('[data-rfm-sku-group]').length;
+                if (remainingGroups <= 1) {
+                    root.querySelector('[data-rfm-sku-groups-toolbar]')?.remove();
+                }
+
+                applyFilters();
+                showToast(data.message || 'SKU group removed.');
+            } catch (error) {
+                btn.disabled = false;
+                showToast(error.message || 'Unable to delete SKU group.', true);
+            }
+        });
+    });
+
     root.querySelectorAll('[data-rfm-price-close]').forEach((btn) => {
         btn.addEventListener('click', closePrice);
     });

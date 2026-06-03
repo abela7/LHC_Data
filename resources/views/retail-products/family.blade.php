@@ -439,9 +439,9 @@
                                     str_contains(mb_strtolower($group->name), 'pack') => '3X, 100g, 500g…',
                                     default => 'Value 1, Value 2…',
                                 };
-                                $groupUsedCount = $products->sum(
-                                    fn ($product) => $product->variantValues->where('product_variant_group_id', $group->id)->count(),
-                                );
+                                $groupUsedCount = $products
+                                    ->filter(fn ($product) => $product->variantValues->contains('product_variant_group_id', $group->id))
+                                    ->count();
                             @endphp
                             <article class="rfm-variant-item">
                                 <header class="rfm-variant-item-head">
@@ -451,20 +451,24 @@
                                     </div>
                                     <form method="POST"
                                           action="{{ route('retail-products.families.variant-groups.destroy', [$family, $group]) }}"
-                                          onsubmit="return confirm('Remove variant group {{ addslashes($group->name) }}? This also removes unused values under it.');">
+                                          onsubmit="return confirm(@js($groupUsedCount > 0
+                                              ? 'Remove variant group '.$group->name.' and permanently delete '.$groupUsedCount.' sellable SKU'.($groupUsedCount === 1 ? '' : 's').' that use it? This cannot be undone.'
+                                              : 'Remove variant group '.$group->name.'? Unused values under it will be removed too.'));">
                                         @csrf
                                         @method('DELETE')
                                         <button type="submit"
                                                 class="rfm-variant-group-remove"
-                                                @disabled($groupUsedCount > 0)
-                                                title="{{ $groupUsedCount > 0 ? 'This group is used by '.$groupUsedCount.' SKU'.($groupUsedCount === 1 ? '' : 's') : 'Remove unused group' }}">
+                                                title="{{ $groupUsedCount > 0
+                                                    ? 'Remove '.$group->name.' and delete '.$groupUsedCount.' sellable SKU'.($groupUsedCount === 1 ? '' : 's')
+                                                    : 'Remove unused group' }}">
                                             Remove
                                         </button>
                                     </form>
                                 </header>
                                 @if ($groupUsedCount > 0)
                                     <p class="rfm-variant-group-usage">
-                                        Used by {{ $groupUsedCount }} SKU{{ $groupUsedCount === 1 ? '' : 's' }}. Delete or edit those SKUs before removing this group.
+                                        Used by {{ $groupUsedCount }} sellable SKU{{ $groupUsedCount === 1 ? '' : 's' }}.
+                                        Removing this group deletes those SKUs permanently.
                                     </p>
                                 @endif
                                 <div class="rfm-variant-chip-field"
@@ -999,6 +1003,18 @@
                                         <span class="rfm-sku-group-common">{{ $familyCommonLabels->implode(' · ') }}</span>
                                     @endif
                                     <em class="rfm-sku-group-count">{{ $skuGroup['products']->count() }} SKU{{ $skuGroup['products']->count() === 1 ? '' : 's' }}</em>
+                                    @if (! empty($skuGroup['option_id']))
+                                        <button type="button"
+                                                class="rfm-sku-group-delete"
+                                                data-rfm-sku-bucket-delete
+                                                data-rfm-action="{{ route('retail-products.families.variant-options.skus.destroy', [$family, $skuGroup['option_id']]) }}"
+                                                data-rfm-bucket-axis="{{ $groupingGroup->name }}"
+                                                data-rfm-bucket-label="{{ $skuGroup['label'] }}"
+                                                data-rfm-sku-count="{{ $skuGroup['products']->count() }}"
+                                                title="Delete all SKUs in this group">
+                                            Delete group
+                                        </button>
+                                    @endif
                                 </div>
                                 <span class="rfm-sku-group-chevron" aria-hidden="true">›</span>
                             </summary>
