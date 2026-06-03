@@ -80,10 +80,22 @@ const firstLaravelError = (payload) => {
 const RFM_BARCODE_MODE_KEY = 'rfm-barcode-input-mode';
 const BARCODE_CAMERA_DETECT_MS = 180;
 
-const cameraBarcodeSupported = () =>
+/** Camera capture is widely available; native BarcodeDetector is not (e.g. Chrome on Windows). */
+const cameraBarcodeAvailable = () =>
     typeof window !== 'undefined'
-    && 'BarcodeDetector' in window
     && !!navigator.mediaDevices?.getUserMedia;
+
+const usesNativeBarcodeDetector = () =>
+    typeof window !== 'undefined'
+    && 'BarcodeDetector' in window;
+
+const isBenignBarcodeScanError = (error) => {
+    if (!error) return true;
+    const name = error.name || '';
+    return name === 'NotFoundException'
+        || name === 'ChecksumException'
+        || name === 'FormatException';
+};
 
 const createCameraBarcodeSession = ({
     video,
@@ -94,6 +106,7 @@ const createCameraBarcodeSession = ({
     let stream = null;
     let timer = null;
     let detector = null;
+    let zxingReader = null;
     let closed = false;
 
     const close = () => {
@@ -101,6 +114,12 @@ const createCameraBarcodeSession = ({
         closed = true;
         window.clearInterval(timer);
         timer = null;
+        try {
+            zxingReader?.reset();
+        } catch {
+            // ignore reset errors
+        }
+        zxingReader = null;
         stream?.getTracks?.().forEach((track) => track.stop());
         stream = null;
         if (video) {
@@ -108,8 +127,43 @@ const createCameraBarcodeSession = ({
         }
     };
 
+    const startNativeDetector = () => {
+        detector = new window.BarcodeDetector({
+            formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128'],
+        });
+        timer = window.setInterval(async () => {
+            if (closed || video.readyState < 2) return;
+            try {
+                const codes = await detector.detect(video);
+                const value = codes?.[0]?.rawValue || '';
+                if (value) {
+                    onDetected(value);
+                }
+            } catch {
+                onError?.('Barcode scanning failed. Use your scanner or type the code.');
+                close();
+            }
+        }, detectIntervalMs);
+    };
+
+    const startZxingFallback = async () => {
+        const { BrowserMultiFormatReader } = await import('@zxing/browser');
+        zxingReader = new BrowserMultiFormatReader();
+        await zxingReader.decodeFromVideoElement(video, (result, err) => {
+            if (closed) return;
+            if (result) {
+                onDetected(result.getText());
+                return;
+            }
+            if (err && !isBenignBarcodeScanError(err)) {
+                onError?.('Barcode scanning failed. Use your scanner or type the code.');
+                close();
+            }
+        });
+    };
+
     const start = async () => {
-        if (!cameraBarcodeSupported()) {
+        if (!cameraBarcodeAvailable()) {
             onError?.('Camera scanning is not supported in this browser. Use a hardware scanner or type the code.');
             return false;
         }
@@ -121,22 +175,12 @@ const createCameraBarcodeSession = ({
             });
             video.srcObject = stream;
             await video.play?.().catch(() => {});
-            detector = new window.BarcodeDetector({
-                formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128'],
-            });
-            timer = window.setInterval(async () => {
-                if (closed || video.readyState < 2) return;
-                try {
-                    const codes = await detector.detect(video);
-                    const value = codes?.[0]?.rawValue || '';
-                    if (value) {
-                        onDetected(value);
-                    }
-                } catch {
-                    onError?.('Barcode scanning failed. Use your scanner or type the code.');
-                    close();
-                }
-            }, detectIntervalMs);
+
+            if (usesNativeBarcodeDetector()) {
+                startNativeDetector();
+            } else {
+                await startZxingFallback();
+            }
             return true;
         } catch {
             onError?.('Camera permission was blocked. Use your scanner or type the code.');
@@ -3899,7 +3943,7 @@ const initRetailFamilyManager = () => {
     };
 
     const setBarcodeInputMode = (mode, { focusKeyboard = false, persist = true } = {}) => {
-        const nextMode = mode === 'camera' && cameraBarcodeSupported() ? 'camera' : 'keyboard';
+        const nextMode = mode === 'camera' && cameraBarcodeAvailable() ? 'camera' : 'keyboard';
         barcodeInputMode = nextMode;
 
         if (persist) {
@@ -3963,7 +4007,7 @@ const initRetailFamilyManager = () => {
     };
 
     const initBarcodeModeUi = () => {
-        const supported = cameraBarcodeSupported();
+        const supported = cameraBarcodeAvailable();
         if (barcodeModeTabs) {
             barcodeModeTabs.hidden = !supported;
         }
@@ -6296,7 +6340,7 @@ const initHairIntakeWizard = () => {
     const openBarcodeScanner = async (input) => {
         if (!input) return;
 
-        if (!cameraBarcodeSupported()) {
+        if (!cameraBarcodeAvailable()) {
             input.focus();
             showToast('Camera barcode scanning is not supported here. Use your scanner or type the code.');
             return;
