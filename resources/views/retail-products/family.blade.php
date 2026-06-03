@@ -66,9 +66,8 @@
             ->map(fn ($v) => $v->option?->label)
             ->filter()
             ->values();
-        $displayName = $product->ecommerceProfile?->online_title ?: ($labels->isNotEmpty()
-            ? $family->family_name.' - '.$labels->implode(' - ')
-            : $product->name);
+        $ecommerceTitle = trim((string) ($product->ecommerceProfile?->online_title ?? ''));
+        $imageAltName = $ecommerceTitle !== '' ? $ecommerceTitle : $product->name;
 
         $mainMedia = $product->media->firstWhere('image_role', 'main')
             ?? $product->media->first(fn ($m) => $m->is_primary && $m->image_role !== 'variant');
@@ -78,7 +77,7 @@
             ->sortBy('sort_order')
             ->values();
 
-        $gallery = $galleryMedia->map(fn ($m) => $ecomPreviewMediaItem($m, $displayName, 'Gallery'))
+        $gallery = $galleryMedia->map(fn ($m) => $ecomPreviewMediaItem($m, $imageAltName, 'Gallery'))
             ->filter()
             ->values()
             ->all();
@@ -92,7 +91,8 @@
 
         return [
             'id' => $product->id,
-            'name' => $displayName,
+            'ecommerceTitle' => $ecommerceTitle !== '' ? $ecommerceTitle : null,
+            'internalName' => $product->name,
             'shortDescription' => $product->ecommerceProfile?->short_description
                 ?: ($product->description ? Str::limit($product->description, 200) : null),
             'longDescription' => $product->ecommerceProfile?->long_description ?: $product->description,
@@ -101,8 +101,8 @@
             'optionsByGroup' => $optionsByGroup,
             'inStock' => $product->inventoryLevels->sum('stock_quantity') > 0,
             'media' => [
-                'main' => $ecomPreviewMediaItem($mainMedia, $displayName, 'Main'),
-                'variant' => $ecomPreviewMediaItem($variantMedia, $displayName, 'Variant'),
+                'main' => $ecomPreviewMediaItem($mainMedia, $imageAltName, 'Main'),
+                'variant' => $ecomPreviewMediaItem($variantMedia, $imageAltName, 'Variant'),
                 'gallery' => $gallery,
             ],
         ];
@@ -125,6 +125,8 @@
 
     $ecomPreviewData = [
         'title' => $ecomPreviewTitle,
+        'familyTitle' => $family->display_family_name,
+        'titlePlaceholder' => 'Choose options to preview the ecommerce product title',
         'brand' => $family->brand_name,
         'line' => $family->line_name,
         'category' => $family->product_type_name ?: $family->root_catalogue_name,

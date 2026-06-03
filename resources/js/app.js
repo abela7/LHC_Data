@@ -3478,6 +3478,18 @@ const initRetailFamilyManager = () => {
                 : 'No suggestions yet';
         }
         updateAiNamingActions();
+
+        root.dispatchEvent(new CustomEvent('rfm-ecom-preview-naming-sync', {
+            bubbles: true,
+            detail: {
+                titles: Object.fromEntries(
+                    suggestions.map((suggestion) => [
+                        String(suggestion.product_id),
+                        suggestion.suggested?.ecommerce_title || '',
+                    ]),
+                ),
+            },
+        }));
     };
 
     aiNamingGenerate?.addEventListener('click', async () => {
@@ -5168,8 +5180,6 @@ const initFamilyDisplayNameEditor = (root, csrf, showToast) => {
         });
         const toolbarTitle = document.getElementById('rfm-ecom-preview-toolbar-title');
         if (toolbarTitle) toolbarTitle.textContent = displayName;
-        const previewTitle = root.querySelector('[data-rfm-ecom-preview-title]');
-        if (previewTitle) previewTitle.textContent = displayName;
         const previewBreadcrumb = root.querySelector('[data-rfm-ecom-preview-breadcrumb]');
         if (previewBreadcrumb && !previewBreadcrumb.dataset.rfmEcomPreviewBreadcrumbLocked) {
             previewBreadcrumb.textContent = displayName;
@@ -5279,6 +5289,50 @@ const initFamilyEcommercePreview = (root) => {
         ...(colourGroupId ? [colourGroupId] : []),
         ...(data.variants || []).map((g) => Number(g.id)),
     ];
+
+    const aiEcommerceTitles = new Map();
+    const titlePlaceholder = data.titlePlaceholder || 'Choose options to preview the ecommerce product title';
+
+    const mergeAiEcommerceTitles = (titles = {}) => {
+        Object.entries(titles).forEach(([productId, title]) => {
+            const trimmed = String(title || '').trim();
+            if (trimmed) {
+                aiEcommerceTitles.set(String(productId), trimmed);
+            }
+        });
+    };
+
+    const ecommerceTitleFromDom = (productId) => {
+        const skuItem = root.querySelector(`[data-rfm-sku][data-rfm-product-id="${productId}"]`);
+        const inline = skuItem?.querySelector('[data-rfm-ai-inline-field="ecommerce_title"]');
+        if (inline?.value?.trim()) {
+            return inline.value.trim();
+        }
+        const row = root.querySelector(`[data-rfm-ai-naming-row][data-product-id="${productId}"]`);
+        const reviewField = row?.querySelector('[data-rfm-ai-naming-field="ecommerce_title"]');
+        if (reviewField?.value?.trim()) {
+            return reviewField.value.trim();
+        }
+        return null;
+    };
+
+    const resolveSkuEcommerceTitle = (sku) => {
+        if (!sku) {
+            return data.title || titlePlaceholder;
+        }
+        const productId = String(sku.id);
+        return aiEcommerceTitles.get(productId)
+            || ecommerceTitleFromDom(productId)
+            || sku.ecommerceTitle
+            || data.title
+            || titlePlaceholder;
+    };
+
+    const setPreviewTitleText = (text) => {
+        const label = text || titlePlaceholder;
+        if (titleEl) titleEl.textContent = label;
+        if (breadcrumbEl) breadcrumbEl.textContent = label;
+    };
 
     const selection = new Map();
     let gallerySlides = [];
@@ -5491,8 +5545,7 @@ const initFamilyEcommercePreview = (root) => {
 
     const applySku = ({ sku, partial }) => {
         if (!sku) {
-            if (titleEl) titleEl.textContent = data.title || '';
-            if (breadcrumbEl) breadcrumbEl.textContent = data.title || '';
+            setPreviewTitleText(data.title || titlePlaceholder);
             if (priceEl) priceEl.textContent = formatPriceRange();
             if (shortEl) shortEl.textContent = data.shortDescription || shortEl.textContent;
             if (skuNoteEl) {
@@ -5507,8 +5560,7 @@ const initFamilyEcommercePreview = (root) => {
             return;
         }
 
-        if (titleEl) titleEl.textContent = sku.name || data.title;
-        if (breadcrumbEl) breadcrumbEl.textContent = sku.name || data.title;
+        setPreviewTitleText(resolveSkuEcommerceTitle(sku));
         if (priceEl) {
             priceEl.textContent = sku.price !== null && !partial
                 ? formatMoney(sku.price)
@@ -5560,6 +5612,29 @@ const initFamilyEcommercePreview = (root) => {
         const { sku, partial } = findBestSku();
         applySku({ sku, partial });
     };
+
+    root.addEventListener('rfm-ecom-preview-naming-sync', (event) => {
+        mergeAiEcommerceTitles(event.detail?.titles || {});
+        if (!overlay.hidden) {
+            refreshPreview();
+        }
+    });
+
+    root.addEventListener('input', (event) => {
+        const field = event.target.closest('[data-rfm-ai-naming-field="ecommerce_title"], [data-rfm-ai-inline-field="ecommerce_title"]');
+        if (!field) {
+            return;
+        }
+        const productId = field.closest('[data-rfm-ai-naming-row]')?.dataset.productId
+            || field.closest('[data-rfm-sku]')?.dataset.rfmProductId;
+        if (!productId) {
+            return;
+        }
+        mergeAiEcommerceTitles({ [productId]: field.value });
+        if (!overlay.hidden) {
+            refreshPreview();
+        }
+    });
 
     const setSelection = (groupId, optionId) => {
         if (!groupId || !optionId) return;

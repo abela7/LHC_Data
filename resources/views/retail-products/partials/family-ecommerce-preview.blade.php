@@ -37,7 +37,7 @@
 
                     <section class="rfm-ecom-preview-buy" aria-label="Purchase information">
                         <p class="rfm-ecom-preview-brand" data-rfm-ecom-preview-brand>{{ $ecomPreviewData['brand'] }}</p>
-                        <h1 class="rfm-ecom-preview-title" id="rfm-ecom-preview-title" data-rfm-ecom-preview-title>{{ $ecomPreviewData['title'] }}</h1>
+                        <h1 class="rfm-ecom-preview-title" id="rfm-ecom-preview-title" data-rfm-ecom-preview-title>{{ $ecomPreviewData['title'] ?: ($ecomPreviewData['titlePlaceholder'] ?? 'Choose options to preview the ecommerce product title') }}</h1>
 
                         <div class="rfm-ecom-preview-rating" aria-hidden="true">
                             <span class="rfm-ecom-preview-stars">★★★★★</span>
