@@ -884,11 +884,29 @@
                         <p>No sellable SKUs yet. Add variant options above, then create combinations.</p>
                     </div>
                 @else
+                    <div class="sw-sku-bulk-bar" data-sw-sku-bulk-bar hidden>
+                        <label class="sw-sku-bulk-select-all">
+                            <input type="checkbox" data-sw-sku-select-all> Select all visible
+                        </label>
+                        <span class="sw-sku-bulk-count"><span data-sw-sku-bulk-count>0</span> selected</span>
+                        <form method="POST"
+                              action="{{ route('brand-catalogue.styles.skus.bulk-destroy', $style) }}"
+                              class="sw-sku-bulk-delete-form"
+                              data-sw-sku-bulk-delete-form
+                              onsubmit="return confirm('Delete ' + (this.closest('[data-sw-fragment=skus]')?.querySelector('[data-sw-sku-bulk-count]')?.textContent || '0') + ' sellable SKU(s)?\n\nThis cannot be undone.');">
+                            @csrf
+                            @method('DELETE')
+                            <div data-sw-sku-bulk-ids></div>
+                            <button type="submit" class="sw-sku-bulk-delete-btn">Delete selected</button>
+                        </form>
+                    </div>
+
                     {{-- SKU Table --}}
                     <div class="sw-sku-table-wrap">
                         <table class="sw-sku-table">
                             <thead>
                                 <tr>
+                                    <th scope="col" class="sw-sku-select-col" aria-label="Select"></th>
                                     <th scope="col">Name</th>
                                     @foreach ($style->variants as $variant)
                                         <th scope="col">{{ $variant->name }}</th>
@@ -915,7 +933,16 @@
                                     <tr class="sw-sku-row"
                                         data-href="{{ $skuShowUrl }}"
                                         data-sw-sku-search="{{ $skuSearchBlob }}"
-                                        onclick="if (!event.target.closest('a, button, input, select, textarea, summary, details, label')) window.location = this.dataset.href;">
+                                        onclick="if (!event.target.closest('a, button, input, select, textarea, summary, details, label, .sw-sku-bulk-bar')) window.location = this.dataset.href;">
+                                        <td class="sw-sku-select-col" data-label="Select">
+                                            <label class="sw-sku-select-label" title="Select SKU">
+                                                <input type="checkbox"
+                                                       class="sw-sku-bulk-check"
+                                                       value="{{ $sku->id }}"
+                                                       data-sku-name="{{ $sku->name }}"
+                                                       onclick="event.stopPropagation()">
+                                            </label>
+                                        </td>
                                         <td class="sw-sku-name-cell" data-label="Name">
                                             <a href="{{ $skuShowUrl }}" class="sw-sku-link">
                                                 <strong>{{ $sku->name }}</strong>

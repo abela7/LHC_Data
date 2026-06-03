@@ -2169,7 +2169,64 @@ const initStyleWorkspaceAjaxV2 = () => {
         if (meta) {
             meta.textContent = q ? `${visible} / ${rows.length}` : '';
         }
+        section?._swSkuBulkUpdate?.();
     };
+
+    const wireSwSkuBulkSelect = (root = workspace) => {
+        const section = root.querySelector('[data-sw-fragment="skus"]');
+        if (!section) return;
+
+        const bar = section.querySelector('[data-sw-sku-bulk-bar]');
+        const countEl = section.querySelector('[data-sw-sku-bulk-count]');
+        const idsEl = section.querySelector('[data-sw-sku-bulk-ids]');
+        const selectAll = section.querySelector('[data-sw-sku-select-all]');
+        if (!bar || !countEl || !idsEl || !selectAll) return;
+
+        const visibleChecks = () => Array.from(section.querySelectorAll('tr.sw-sku-row:not([hidden]) .sw-sku-bulk-check'));
+
+        const update = () => {
+            const checks = visibleChecks();
+            const selected = checks.filter((cb) => cb.checked);
+            const count = selected.length;
+            countEl.textContent = String(count);
+            bar.hidden = count === 0;
+            selectAll.checked = checks.length > 0 && count === checks.length;
+            selectAll.indeterminate = count > 0 && count < checks.length;
+            idsEl.innerHTML = '';
+            selected.forEach((cb) => {
+                const inp = document.createElement('input');
+                inp.type = 'hidden';
+                inp.name = 'ids[]';
+                inp.value = cb.value;
+                idsEl.appendChild(inp);
+            });
+        };
+
+        section._swSkuBulkUpdate = update;
+
+        if (section.dataset.swSkuBulkWired === '1') {
+            update();
+            return;
+        }
+        section.dataset.swSkuBulkWired = '1';
+
+        section.addEventListener('change', (event) => {
+            if (event.target.matches('.sw-sku-bulk-check, [data-sw-sku-select-all]')) {
+                update();
+            }
+        });
+
+        selectAll.addEventListener('change', () => {
+            visibleChecks().forEach((cb) => {
+                cb.checked = selectAll.checked;
+            });
+            update();
+        });
+
+        update();
+    };
+
+    wireSwSkuBulkSelect();
 
     workspace.addEventListener('input', (event) => {
         const t = event.target;
@@ -2248,6 +2305,7 @@ const initStyleWorkspaceAjaxV2 = () => {
         restoreState(state);
         initRetailMediaManagers();
         wireSwOptLabelValueSync(workspace);
+        wireSwSkuBulkSelect(workspace);
     };
 
     const refreshFromCurrentPage = async (keys = fragmentKeys, message = null) => {

@@ -7,6 +7,7 @@ namespace App\Support;
 use App\Models\BrandCatalogueStyle;
 use App\Models\BrandCatalogueVariant;
 use App\Models\BrandCatalogueVariantOption;
+use App\Models\Product;
 use App\Models\ProductFamily;
 use App\Models\ProductSource;
 use Illuminate\Support\Collection;

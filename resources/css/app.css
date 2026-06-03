@@ -16219,6 +16219,70 @@
         @apply mt-0;
     }
 
+    .sw-sku-bulk-bar {
+        @apply flex flex-wrap items-center gap-3 rounded-xl border px-3 py-2;
+        background: #fef9f0;
+        border-color: #e6dccb;
+        margin-bottom: 10px;
+        position: sticky;
+        top: 48px;
+        z-index: 5;
+        box-shadow: 0 2px 8px rgba(26, 24, 21, 0.06);
+    }
+
+    .sw-sku-bulk-select-all {
+        @apply flex items-center gap-1.5 text-xs font-semibold cursor-pointer;
+        color: #6d716a;
+    }
+
+    .sw-sku-bulk-select-all input[type="checkbox"] {
+        @apply h-3.5 w-3.5 cursor-pointer rounded;
+        accent-color: var(--color-accent);
+    }
+
+    .sw-sku-bulk-count {
+        @apply text-xs font-bold;
+        color: var(--color-accent);
+        flex: 1;
+    }
+
+    .sw-sku-bulk-delete-btn {
+        @apply rounded-lg border-0 px-3 py-1.5 text-[11px] font-bold cursor-pointer;
+        background: #c53030;
+        color: white;
+        transition: background 0.12s;
+    }
+
+    .sw-sku-bulk-delete-btn:hover {
+        background: #9b2c2c;
+    }
+
+    .sw-sku-bulk-delete-form {
+        @apply m-0;
+    }
+
+    .sw-sku-select-col {
+        width: 2.25rem;
+        min-width: 2.25rem;
+        text-align: center;
+        vertical-align: middle;
+    }
+
+    .sw-sku-select-label {
+        @apply inline-flex cursor-pointer items-center justify-center;
+        width: 1.75rem;
+        height: 1.75rem;
+    }
+
+    .sw-sku-select-label input[type="checkbox"] {
+        @apply h-4 w-4 cursor-pointer rounded;
+        accent-color: var(--color-accent);
+    }
+
+    .sw-sku-table tbody tr.sw-sku-row:has(.sw-sku-bulk-check:checked) {
+        background: rgba(29, 111, 95, 0.03);
+    }
+
     .sw-sku-card-variants,
     .sw-sku-mobile-meta {
         display: none;
@@ -16379,8 +16443,14 @@
             display: none;
         }
 
+        .sw-sku-select-col {
+            flex: 0 0 auto;
+            order: 0;
+            align-self: flex-start;
+        }
+
         .sw-sku-name-cell {
-            flex: 1 1 calc(100% - 5.5rem);
+            flex: 1 1 calc(100% - 6.5rem);
             min-width: 0;
             order: 1;
         }

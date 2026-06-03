@@ -1583,6 +1583,26 @@ class BrandCatalogueController extends Controller
         return redirect()->back()->with('status', "Sellable SKU \"{$name}\" deleted.");
     }
 
+    public function bulkDestroySkus(Request $request, BrandCatalogueStyle $style): RedirectResponse
+    {
+        $ids = collect($request->input('ids', []))
+            ->map(fn ($id) => (int) $id)
+            ->filter(fn ($id) => $id > 0)
+            ->unique()
+            ->values();
+
+        if ($ids->isEmpty()) {
+            return redirect()->back()->with('warning', 'No sellable SKUs selected.');
+        }
+
+        $deleted = BrandCatalogueSku::query()
+            ->where('brand_catalogue_style_id', $style->id)
+            ->whereIn('id', $ids->all())
+            ->delete();
+
+        return redirect()->back()->with('status', "{$deleted} sellable SKU(s) deleted.");
+    }
+
     public function destroyVariant(BrandCatalogueVariant $variant): RedirectResponse
     {
         if ($variant->options()->exists()) {

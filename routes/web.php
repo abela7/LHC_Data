@@ -323,6 +323,7 @@ Route::delete('/brand-catalogue/styles/{style}', [BrandCatalogueController::clas
 Route::delete('/brand-catalogue/variants/{variant}', [BrandCatalogueController::class, 'destroyVariant'])->name('brand-catalogue.variants.destroy');
 Route::delete('/brand-catalogue/variant-options/{option}', [BrandCatalogueController::class, 'destroyVariantOption'])->name('brand-catalogue.variant-options.destroy');
 Route::delete('/brand-catalogue/skus/{sku}', [BrandCatalogueController::class, 'destroySku'])->name('brand-catalogue.skus.destroy');
+Route::delete('/brand-catalogue/styles/{style}/skus-bulk', [BrandCatalogueController::class, 'bulkDestroySkus'])->name('brand-catalogue.styles.skus.bulk-destroy');
 
 Route::get('/exports', [ExportController::class, 'index'])->name('exports.index');
 Route::get('/exports/catalogue-ai-input.csv', [ExportController::class, 'catalogueAiInputCsv'])->name('exports.catalogue-ai-input.csv');
