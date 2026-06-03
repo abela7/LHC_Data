@@ -104,7 +104,10 @@ class PinkCommerceBridge
                 }
             }
 
-            // A globally-unique, stable SKU code is required by the API.
+            // Mirror everything that has a SKU code (or barcode as fallback). Incomplete
+            // fields (null barcode, missing price) are passed through as null/0 so the
+            // Railway DB progressively reflects whatever state his app has — barcode and
+            // price get filled in on later edits/republishes and update upserts cleanly.
             $code = $product->sku ?: $product->barcode;
             if (! $code) {
                 continue;
