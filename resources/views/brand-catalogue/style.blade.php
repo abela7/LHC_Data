@@ -82,19 +82,21 @@
                 @endif
             </div>
 
-            @if ($retailFamilies->isNotEmpty())
-                <nav class="sw-style-retail-nav" aria-label="Retail families for this style">
-                    <span class="sw-style-retail-nav-label">Retail families</span>
+            @if ($retailNavItems->isNotEmpty())
+                <nav class="sw-style-retail-nav" aria-label="Retail sellables for this style">
+                    <span class="sw-style-retail-nav-label">Retail by option</span>
                     <div class="sw-style-retail-nav-pills">
-                        @foreach ($retailFamilies as $retailFamily)
+                        @foreach ($retailNavItems as $retailNavItem)
                             @php
-                                $pillLabel = \App\Support\RetailStyleFamilyCatalogue::familyDisplayLabel($retailFamily, $style->variants);
+                                $retailFamily = $retailNavItem['family'];
+                                $pillLabel = $retailNavItem['label'];
+                                $pillCount = (int) $retailNavItem['products_count'];
                             @endphp
                             <a href="{{ route('retail-products.families.show', $retailFamily) }}"
-                               class="sw-style-retail-pill {{ (int) ($retailFamily->products_count ?? 0) === 0 ? 'is-empty' : '' }}"
-                               title="{{ $pillLabel }} — {{ $retailFamily->products_count }} sellable SKU{{ $retailFamily->products_count === 1 ? '' : 's' }}">
+                               class="sw-style-retail-pill {{ $pillCount === 0 ? 'is-empty' : '' }}"
+                               title="{{ $pillLabel }} — {{ $pillCount }} sellable SKU{{ $pillCount === 1 ? '' : 's' }} on this style">
                                 {{ $pillLabel }}
-                                <em>{{ $retailFamily->products_count }}</em>
+                                <em>{{ $pillCount }}</em>
                             </a>
                         @endforeach
                     </div>
@@ -302,7 +304,7 @@
                             <p>
                                 @if ($retailSkuTotal > 0)
                                     @if ($retailFamilyCount > 1)
-                                        {{ $retailFamilyCount }} retail families with {{ $retailSkuTotal }} sellable SKU{{ $retailSkuTotal === 1 ? '' : 's' }} (split buckets).
+                                        {{ $retailSkuTotal }} sellable SKU{{ $retailSkuTotal === 1 ? '' : 's' }} across {{ $retailFamilyCount }} retail groups on this style.
                                     @else
                                         Published family with {{ $retailSkuTotal }} sellable product{{ $retailSkuTotal === 1 ? '' : 's' }}.
                                     @endif
@@ -351,7 +353,7 @@
 
                     @if ($retailFamilyCount > 1)
                         <p class="sw-publish-split-hint">
-                            {{ $retailFamilyCount }} retail families for this style — use the <strong>Retail families</strong> pills in the sidebar.
+                            Sellables are grouped by catalogue option (e.g. 16″, 20″) — use <strong>Retail by option</strong> in the sidebar.
                         </p>
                     @endif
 
@@ -766,7 +768,7 @@
                     ? 'Add variant options, then create SKUs'
                     : ($retailSkuTotal > 0
                         ? ($retailFamilyCount > 1
-                            ? number_format($retailSkuTotal).' SKUs in '.$retailFamilyCount.' retail families'
+                            ? number_format($retailSkuTotal).' SKUs in '.$retailFamilyCount.' retail groups'
                             : number_format($retailSkuTotal).' in retail')
                         : 'Ready to publish to retail');
             @endphp
@@ -807,7 +809,7 @@
                                     View retail ({{ $publishedFamily->products_count }})
                                 </a>
                             @elseif ($retailFamilyCount > 1)
-                                <span class="sw-sku-retail-hint">Open a length bucket from <strong>Retail families</strong> in the sidebar.</span>
+                                <span class="sw-sku-retail-hint">Open a length from <strong>Retail by option</strong> in the sidebar.</span>
                             @endif
                             <form method="POST" action="{{ route('brand-catalogue.styles.publish-products', $style) }}" class="sw-sku-publish-form">
                                 @csrf

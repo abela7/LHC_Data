@@ -154,7 +154,8 @@ final class RetailStyleFamilyCatalogue
             fn (ProductFamily $family): bool => (string) ($family->catalogue_scope_key ?? '') === $scopeKey,
         );
 
-        if ($byScope instanceof ProductFamily) {
+        if ($byScope instanceof ProductFamily
+            && self::retailProductCountForCatalogueOption($byScope, $catalogueOption) > 0) {
             return $byScope;
         }
 
@@ -172,21 +173,148 @@ final class RetailStyleFamilyCatalogue
             return false;
         });
 
-        if ($byCatalogueOption instanceof ProductFamily) {
+        if ($byCatalogueOption instanceof ProductFamily
+            && self::retailProductCountForCatalogueOption($byCatalogueOption, $catalogueOption) > 0) {
             return $byCatalogueOption;
         }
 
-        $needle = Str::lower(trim($catalogueOption->label));
+        $mainFamily = $families->first(
+            fn (ProductFamily $family): bool => ! filled($family->catalogue_scope_key),
+        );
 
-        return $families->first(function (ProductFamily $family) use ($needle): bool {
-            if (! filled($family->catalogue_scope_key)) {
-                return false;
+        if ($mainFamily instanceof ProductFamily
+            && self::retailProductCountForCatalogueOption($mainFamily, $catalogueOption) > 0) {
+            return $mainFamily;
+        }
+
+        if ($byScope instanceof ProductFamily) {
+            return $byScope;
+        }
+
+        return $byCatalogueOption instanceof ProductFamily ? $byCatalogueOption : null;
+    }
+
+    /**
+     * Style workspace sidebar: one pill per catalogue variant option on this style
+     * (16", 20", …), not one row per internal retail family split.
+     *
+     * @param  Collection<int, BrandCatalogueVariant>  $catalogueVariants
+     * @param  Collection<int, ProductFamily>  $families
+     * @return Collection<int, array{label: string, family: ProductFamily, products_count: int, catalogue_option_id: int}>
+     */
+    public static function styleWorkspaceRetailNav(
+        BrandCatalogueStyle $style,
+        Collection $catalogueVariants,
+        Collection $families,
+    ): Collection {
+        if ($families->isEmpty()) {
+            return collect();
+        }
+
+        $style->loadMissing(['skus.optionValues']);
+        $families->loadMissing(['variantGroups.options']);
+
+        $items = collect();
+
+        foreach ($catalogueVariants->sortBy('sort_order') as $variant) {
+            foreach ($variant->options->sortBy('sort_order') as $option) {
+                $family = self::resolveFamilyForCatalogueOption($families, $variant->name, $option);
+
+                if (! $family instanceof ProductFamily) {
+                    continue;
+                }
+
+                $count = self::retailProductCountForCatalogueOption($family, $option);
+
+                if ($count === 0) {
+                    $mainFamily = $families->first(
+                        fn (ProductFamily $candidate): bool => ! filled($candidate->catalogue_scope_key),
+                    );
+
+                    if ($mainFamily instanceof ProductFamily && $mainFamily->id !== $family->id) {
+                        $mainCount = self::retailProductCountForCatalogueOption($mainFamily, $option);
+
+                        if ($mainCount > 0) {
+                            $family = $mainFamily;
+                            $count = $mainCount;
+                        }
+                    }
+                }
+
+                $catalogueSkuCount = count(self::catalogueSkuIdsForOption($style, $option));
+
+                if ($count === 0 && $catalogueSkuCount === 0) {
+                    continue;
+                }
+
+                $items->push([
+                    'label' => $option->label,
+                    'family' => $family,
+                    'products_count' => $count,
+                    'catalogue_option_id' => (int) $option->id,
+                ]);
             }
+        }
 
-            $label = Str::lower(self::scopeLabel($family->catalogue_scope_key));
+        $mainFamily = $families->first(
+            fn (ProductFamily $family): bool => ! filled($family->catalogue_scope_key),
+        );
 
-            return $label === $needle || str_contains($label, $needle);
-        });
+        if ($mainFamily instanceof ProductFamily) {
+            $accounted = $items->sum('products_count');
+            $mainTotal = (int) $mainFamily->products_count;
+            $remainder = max(0, $mainTotal - $accounted);
+
+            if ($remainder > 0) {
+                $items->prepend([
+                    'label' => 'All',
+                    'family' => $mainFamily,
+                    'products_count' => $remainder,
+                    'catalogue_option_id' => 0,
+                ]);
+            } elseif ($items->isEmpty() && $mainTotal > 0) {
+                $items->push([
+                    'label' => 'Retail',
+                    'family' => $mainFamily,
+                    'products_count' => $mainTotal,
+                    'catalogue_option_id' => 0,
+                ]);
+            }
+        }
+
+        return $items
+            ->groupBy(fn (array $item): string => Str::lower(trim($item['label'])))
+            ->map(fn (Collection $group): array => $group->sortByDesc('products_count')->first())
+            ->sortBy(fn (array $item): string => VariantNaturalSort::valueKey($item['label']))
+            ->values();
+    }
+
+    public static function retailProductCountForCatalogueOption(
+        ProductFamily $family,
+        BrandCatalogueVariantOption $catalogueOption,
+    ): int {
+        $catalogueOption->loadMissing('variant');
+        $variant = $catalogueOption->variant;
+        $scopeKey = $variant
+            ? self::splitScopeKey($variant->name, $catalogueOption->label)
+            : '';
+
+        if ((string) ($family->catalogue_scope_key ?? '') === $scopeKey) {
+            return (int) Product::query()->where('product_family_id', $family->id)->count();
+        }
+
+        $catalogueOptionId = (int) $catalogueOption->id;
+        $labelNeedle = Str::lower(trim($catalogueOption->label));
+
+        return (int) Product::query()
+            ->where('product_family_id', $family->id)
+            ->whereHas('variantValues.option', function ($query) use ($catalogueOptionId, $labelNeedle): void {
+                $query->where(function ($inner) use ($catalogueOptionId, $labelNeedle): void {
+                    $inner->where('brand_catalogue_variant_option_id', $catalogueOptionId)
+                        ->orWhereRaw('LOWER(TRIM(label)) = ?', [$labelNeedle]);
+                });
+            })
+            ->count();
     }
 
     /**

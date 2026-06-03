@@ -371,6 +371,11 @@ class BrandCatalogueController extends Controller
         ]);
 
         $retailFamilies = RetailStyleFamilyCatalogue::familiesForStyle((int) $style->id);
+        $retailNavItems = RetailStyleFamilyCatalogue::styleWorkspaceRetailNav(
+            $style,
+            $style->variants,
+            $retailFamilies,
+        );
         $publishedFamily = RetailStyleFamilyCatalogue::primaryFamily($retailFamilies);
         $retailByCatalogueOptionId = RetailStyleFamilyCatalogue::catalogueOptionRetailMap(
             (int) $style->id,
@@ -402,7 +407,10 @@ class BrandCatalogueController extends Controller
             'style' => $style,
             'publishedFamily' => $publishedFamily,
             'retailFamilies' => $retailFamilies,
-            'retailFamilyCount' => $retailFamilies->count(),
+            'retailNavItems' => $retailNavItems,
+            'retailFamilyCount' => $retailNavItems->isNotEmpty()
+                ? $retailNavItems->count()
+                : $retailFamilies->count(),
             'retailSkuTotal' => (int) $retailFamilies->sum('products_count'),
             'retailByCatalogueOptionId' => $retailByCatalogueOptionId,
             'materialOptions' => $this->materialOptions(),
