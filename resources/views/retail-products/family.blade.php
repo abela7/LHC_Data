@@ -1717,7 +1717,7 @@
 
                 <div class="rfm-barcode-camera" data-rfm-barcode-camera-panel hidden>
                     <div class="rfm-barcode-camera-view">
-                        <video autoplay playsinline muted data-rfm-barcode-video></video>
+                        <video autoplay playsinline webkit-playsinline muted data-rfm-barcode-video></video>
                     </div>
                     <p class="rfm-barcode-camera-hint">Point at the barcode. We verify the check digit and need two matching reads before saving.</p>
                     <button type="button" class="rfm-barcode-back-type" data-rfm-barcode-mode="keyboard">

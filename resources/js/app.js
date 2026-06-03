@@ -184,14 +184,106 @@ const acceptCameraBarcodeCandidate = (rawValue, state, onDetected, onConfirming)
     onDetected(normalized);
 };
 
-/** Camera capture is widely available; native BarcodeDetector is not (e.g. Chrome on Windows). */
+const isIosDevice = () => {
+    if (typeof navigator === 'undefined') {
+        return false;
+    }
+    const ua = navigator.userAgent || '';
+    return /iPad|iPhone|iPod/i.test(ua)
+        || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+};
+
+/** Camera capture needs HTTPS (or localhost) and getUserMedia. */
 const cameraBarcodeAvailable = () =>
     typeof window !== 'undefined'
+    && window.isSecureContext
     && !!navigator.mediaDevices?.getUserMedia;
 
-const usesNativeBarcodeDetector = () =>
-    typeof window !== 'undefined'
-    && 'BarcodeDetector' in window;
+/** iOS Safari: use ZXing — native BarcodeDetector is missing or unreliable. */
+const usesNativeBarcodeDetector = () => {
+    if (isIosDevice()) {
+        return false;
+    }
+    return typeof window !== 'undefined' && 'BarcodeDetector' in window;
+};
+
+const getBarcodeCameraConstraintAttempts = () => [
+    {
+        audio: false,
+        video: {
+            facingMode: { ideal: 'environment' },
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+        },
+    },
+    {
+        audio: false,
+        video: { facingMode: { ideal: 'environment' } },
+    },
+    {
+        audio: false,
+        video: true,
+    },
+];
+
+const prepareBarcodeVideoElement = (video) => {
+    if (!video) return;
+    video.setAttribute('playsinline', 'true');
+    video.setAttribute('webkit-playsinline', 'true');
+    video.muted = true;
+    video.autoplay = true;
+};
+
+const waitForBarcodeVideoReady = (video) => new Promise((resolve) => {
+    if (!video) {
+        resolve();
+        return;
+    }
+    if (video.readyState >= 2) {
+        resolve();
+        return;
+    }
+    const done = () => {
+        video.removeEventListener('loadedmetadata', done);
+        resolve();
+    };
+    video.addEventListener('loadedmetadata', done, { once: true });
+    window.setTimeout(done, 2500);
+});
+
+const acquireBarcodeCameraStream = async (video) => {
+    prepareBarcodeVideoElement(video);
+    let lastError = null;
+    for (const constraints of getBarcodeCameraConstraintAttempts()) {
+        try {
+            const mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
+            video.srcObject = mediaStream;
+            await waitForBarcodeVideoReady(video);
+            await video.play?.().catch(() => {});
+            return mediaStream;
+        } catch (error) {
+            lastError = error;
+        }
+    }
+    throw lastError || new Error('Camera unavailable');
+};
+
+const barcodeCameraErrorMessage = (error) => {
+    const name = error?.name || '';
+    if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
+        return 'Camera permission was blocked. Allow camera access in Settings → Safari → Camera, then try again.';
+    }
+    if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
+        return 'No camera was found on this device.';
+    }
+    if (name === 'NotReadableError' || name === 'TrackStartError') {
+        return 'Camera is in use by another app. Close it and try again.';
+    }
+    if (!window.isSecureContext) {
+        return 'Camera needs a secure connection (https://). Open the site with HTTPS.';
+    }
+    return 'Could not start the camera. Use Scanner / type, or try again.';
+};
 
 const isBenignBarcodeScanError = (error) => {
     if (!error) return true;
@@ -213,6 +305,7 @@ const createCameraBarcodeSession = ({
     let timer = null;
     let detector = null;
     let zxingReader = null;
+    let zxingScanControls = null;
     let closed = false;
     const confirmState = { lastValid: '', matchCount: 0 };
 
@@ -238,6 +331,12 @@ const createCameraBarcodeSession = ({
         closed = true;
         window.clearInterval(timer);
         timer = null;
+        try {
+            zxingScanControls?.stop();
+        } catch {
+            // ignore stop errors
+        }
+        zxingScanControls = null;
         try {
             zxingReader?.reset();
         } catch {
@@ -271,9 +370,17 @@ const createCameraBarcodeSession = ({
     };
 
     const startZxingFallback = async () => {
-        const { BrowserMultiFormatReader } = await import('@zxing/browser');
+        let BrowserMultiFormatReader;
+        try {
+            ({ BrowserMultiFormatReader } = await import('@zxing/browser'));
+        } catch {
+            throw new Error('ZXING_LOAD_FAILED');
+        }
+
         zxingReader = new BrowserMultiFormatReader();
-        await zxingReader.decodeFromVideoElement(video, (result, err) => {
+        prepareBarcodeVideoElement(video);
+
+        const onZxingResult = (result, err) => {
             if (closed) return;
             if (result) {
                 emitCandidate(result.getText());
@@ -283,31 +390,64 @@ const createCameraBarcodeSession = ({
                 onError?.('Barcode scanning failed. Use your scanner or type the code.');
                 close();
             }
-        });
+        };
+
+        let lastError = null;
+        for (const constraints of getBarcodeCameraConstraintAttempts()) {
+            if (closed) return;
+            try {
+                zxingScanControls = await zxingReader.decodeFromConstraints(
+                    constraints,
+                    video,
+                    onZxingResult,
+                );
+                stream = video.srcObject instanceof MediaStream ? video.srcObject : stream;
+                return;
+            } catch (error) {
+                lastError = error;
+                try {
+                    zxingScanControls?.stop();
+                } catch {
+                    // ignore
+                }
+                zxingScanControls = null;
+                try {
+                    zxingReader.reset();
+                } catch {
+                    // ignore
+                }
+            }
+        }
+
+        throw lastError || new Error('ZXING_CAMERA_FAILED');
     };
 
     const start = async () => {
         if (!cameraBarcodeAvailable()) {
-            onError?.('Camera scanning is not supported in this browser. Use a hardware scanner or type the code.');
+            onError?.(
+                window.isSecureContext
+                    ? 'Camera scanning is not supported in this browser. Use a hardware scanner or type the code.'
+                    : 'Camera needs HTTPS. Open this site with https:// …',
+            );
             return false;
         }
 
-        try {
-            stream = await navigator.mediaDevices.getUserMedia({
-                video: { facingMode: { ideal: 'environment' } },
-                audio: false,
-            });
-            video.srcObject = stream;
-            await video.play?.().catch(() => {});
+        prepareBarcodeVideoElement(video);
 
+        try {
             if (usesNativeBarcodeDetector()) {
+                stream = await acquireBarcodeCameraStream(video);
                 startNativeDetector();
             } else {
                 await startZxingFallback();
             }
             return true;
-        } catch {
-            onError?.('Camera permission was blocked. Use your scanner or type the code.');
+        } catch (error) {
+            if (error?.message === 'ZXING_LOAD_FAILED') {
+                onError?.('Could not load the camera scanner. Check your connection and try again.');
+            } else {
+                onError?.(barcodeCameraErrorMessage(error));
+            }
             close();
             return false;
         }
