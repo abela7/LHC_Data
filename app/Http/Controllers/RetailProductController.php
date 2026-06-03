@@ -25,6 +25,7 @@ use App\Services\SkuCodeAllocator;
 use App\Support\CustomerProductDescription;
 use App\Support\HairExtensionLengthLabel;
 use App\Support\RetailFamilySkuGrouper;
+use App\Support\RetailStyleFamilyCatalogue;
 use App\Support\VariantNaturalSort;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Query\Builder;
@@ -287,9 +288,15 @@ class RetailProductController extends Controller
             'inventory_section_id' => $sharedSectionId,
         ];
 
+        $styleRetailFamilies = $family->brand_catalogue_style_id
+            ? RetailStyleFamilyCatalogue::familiesForStyle((int) $family->brand_catalogue_style_id)
+            : collect();
+
         return view('retail-products.family', [
             'family' => $family,
             'products' => $products,
+            'styleRetailFamilies' => $styleRetailFamilies,
+            'styleRetailScopeLabel' => RetailStyleFamilyCatalogue::scopeLabel($family->catalogue_scope_key ?? null),
             'skuGrouping' => RetailFamilySkuGrouper::forFamily($family, $products),
             'familySharedDetails' => $familySharedDetails,
             'mediaRoles' => [
@@ -2418,8 +2425,27 @@ class RetailProductController extends Controller
             $maps['optionMap'],
         );
         $this->pruneUnusedFamilyVariantOption($family, $optionId);
+        $this->recordSplitFamilySource($family, $targetFamily, $splitGroup, $option);
 
         return $targetFamily->fresh(['products']);
+    }
+
+    private function recordSplitFamilySource(
+        ProductFamily $sourceFamily,
+        ProductFamily $targetFamily,
+        ProductVariantGroup $splitGroup,
+        ProductVariantOption $splitOption,
+    ): void {
+        ProductSource::query()->create([
+            'product_family_id' => $targetFamily->id,
+            'product_id' => null,
+            'source_type' => 'retail_family_bucket_split',
+            'source_table' => 'product_families',
+            'source_id' => $sourceFamily->id,
+            'source_url' => route('retail-products.families.show', $sourceFamily),
+            'confidence' => 'A',
+            'notes' => "Split from family #{$sourceFamily->id} ({$splitGroup->name}: {$splitOption->label}).",
+        ]);
     }
 
     public function suggestFamilyNaming(Request $request, ProductFamily $family, OpenAiRetailNamingService $naming): JsonResponse

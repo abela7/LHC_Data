@@ -83,7 +83,13 @@
                     $publishedFamily = $publishedFamiliesByStyle->get($style->id);
                 @endphp
                 <div class="bc-card-row {{ $publishedFamily ? 'bc-card-row--published' : '' }}">
-                    <a href="{{ $publishedFamily ? route('retail-products.families.show', $publishedFamily) : route('brand-catalogue.styles.show', [$catalogue, $brand, $line, $productType, $style]) }}" class="bc-card-link">
+                    @php
+                        $styleCardUrl = route('brand-catalogue.styles.show', [$catalogue, $brand, $line, $productType, $style]).'?catalogue=1';
+                        if ($publishedFamily && (int) ($publishedFamily->retail_families_count ?? 1) <= 1) {
+                            $styleCardUrl = route('retail-products.families.show', $publishedFamily);
+                        }
+                    @endphp
+                    <a href="{{ $styleCardUrl }}" class="bc-card-link">
                         <span class="sr-node-order">{{ $style->sort_order }}</span>
                         <div class="bc-card-body">
                             <span class="bc-card-name">
@@ -94,7 +100,15 @@
                             </span>
                             <span class="bc-card-meta">
                                 @if ($publishedFamily)
-                                    {{ number_format($publishedFamily->products_count) }} sellable SKU{{ $publishedFamily->products_count === 1 ? '' : 's' }} in retail
+                                    @php
+                                        $retailFamilyCount = (int) ($publishedFamily->retail_families_count ?? 1);
+                                        $retailSkuTotal = (int) ($publishedFamily->retail_products_total ?? $publishedFamily->products_count);
+                                    @endphp
+                                    @if ($retailFamilyCount > 1)
+                                        {{ $retailFamilyCount }} retail families · {{ number_format($retailSkuTotal) }} SKUs
+                                    @else
+                                        {{ number_format($retailSkuTotal) }} sellable SKU{{ $retailSkuTotal === 1 ? '' : 's' }} in retail
+                                    @endif
                                 @else
                                     {{ $style->variants_count }} variant group{{ $style->variants_count === 1 ? '' : 's' }}
                                 @endif

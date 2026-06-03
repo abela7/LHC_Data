@@ -15,7 +15,9 @@ use App\Models\HairExtensionIntake;
 use App\Models\Product;
 use App\Models\ProductFamily;
 use App\Services\SkuCodeAllocator;
+use App\Support\RetailStyleFamilyCatalogue;
 use Illuminate\Contracts\View\View;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -102,38 +104,38 @@ class BrandCatalogueController extends Controller
         );
 
         $styleRows = $styleRows->map(function (object $row) use ($catalogue, $publishedFamiliesByStyle): array {
-                $productTypeName = (string) $row->product_type_name;
-                $styleName = (string) $row->style_name;
-                $majorType = $this->majorProductTypeFor($productTypeName, $styleName);
-                $publishedFamily = $publishedFamiliesByStyle->get((int) $row->style_id);
+            $productTypeName = (string) $row->product_type_name;
+            $styleName = (string) $row->style_name;
+            $majorType = $this->majorProductTypeFor($productTypeName, $styleName);
+            $publishedFamily = $publishedFamiliesByStyle->get((int) $row->style_id);
 
-                return [
-                    'major_type' => $majorType,
-                    'major_sort' => $this->majorProductTypeSort($majorType),
-                    'product_type_name' => $productTypeName,
-                    'style_id' => (int) $row->style_id,
-                    'style_name' => $styleName,
-                    'style_family' => $this->styleFamilyLabelFor($styleName, $productTypeName),
-                    'material_name' => $row->material_name ?: 'Material not set',
-                    'brand_id' => (int) $row->brand_id,
-                    'brand_name' => (string) $row->brand_name,
-                    'line_id' => $row->line_id ? (int) $row->line_id : null,
-                    'line_name' => $row->line_name ?: (string) $row->brand_name,
-                    'product_type_id' => (int) $row->product_type_id,
-                    'sku_count' => (int) $row->sku_count,
-                    'variant_count' => (int) $row->variant_count,
-                    'is_published' => $publishedFamily !== null,
-                    'retail_products_count' => (int) ($publishedFamily?->products_count ?? 0),
-                    'url' => $this->styleOpenUrl(
-                        $catalogue,
-                        (int) $row->brand_id,
-                        (int) $row->line_id,
-                        (int) $row->product_type_id,
-                        (int) $row->style_id,
-                        $publishedFamily,
-                    ),
-                ];
-            });
+            return [
+                'major_type' => $majorType,
+                'major_sort' => $this->majorProductTypeSort($majorType),
+                'product_type_name' => $productTypeName,
+                'style_id' => (int) $row->style_id,
+                'style_name' => $styleName,
+                'style_family' => $this->styleFamilyLabelFor($styleName, $productTypeName),
+                'material_name' => $row->material_name ?: 'Material not set',
+                'brand_id' => (int) $row->brand_id,
+                'brand_name' => (string) $row->brand_name,
+                'line_id' => $row->line_id ? (int) $row->line_id : null,
+                'line_name' => $row->line_name ?: (string) $row->brand_name,
+                'product_type_id' => (int) $row->product_type_id,
+                'sku_count' => (int) $row->sku_count,
+                'variant_count' => (int) $row->variant_count,
+                'is_published' => $publishedFamily !== null,
+                'retail_products_count' => (int) ($publishedFamily?->products_count ?? 0),
+                'url' => $this->styleOpenUrl(
+                    $catalogue,
+                    (int) $row->brand_id,
+                    (int) $row->line_id,
+                    (int) $row->product_type_id,
+                    (int) $row->style_id,
+                    $publishedFamily,
+                ),
+            ];
+        });
 
         $majorGroups = $styleRows
             ->groupBy('major_type')
@@ -360,8 +362,10 @@ class BrandCatalogueController extends Controller
         $this->assertProductTypeInLine($line, $productType);
         $this->assertStyleInProductType($brand, $productType, $style);
 
-        $publishedFamily = $this->publishedFamilyForStyle((int) $style->id);
-        if ($publishedFamily !== null && ! $request->boolean('catalogue')) {
+        $retailFamilies = RetailStyleFamilyCatalogue::familiesForStyle((int) $style->id);
+        $publishedFamily = RetailStyleFamilyCatalogue::primaryFamily($retailFamilies);
+
+        if ($retailFamilies->count() === 1 && $publishedFamily !== null && ! $request->boolean('catalogue')) {
             return redirect()->route('retail-products.families.show', $publishedFamily);
         }
 
@@ -392,6 +396,7 @@ class BrandCatalogueController extends Controller
             'productType' => $productType,
             'style' => $style,
             'publishedFamily' => $publishedFamily,
+            'retailFamilies' => $retailFamilies,
             'materialOptions' => $this->materialOptions(),
             'productTypeOptions' => $line->productTypes,
             'optionImageRoleOptions' => $this->optionImageRoleOptions(),
@@ -711,7 +716,7 @@ class BrandCatalogueController extends Controller
             return $sku;
         });
 
-        return redirect()->back()->with('status', "Sellable SKU \"{$sku->name}\" added (".($sku->sku_code ?? 'no code').").");
+        return redirect()->back()->with('status', "Sellable SKU \"{$sku->name}\" added (".($sku->sku_code ?? 'no code').').');
     }
 
     public function syncVariantMatrix(Request $request, BrandCatalogueStyle $style): RedirectResponse
@@ -911,7 +916,7 @@ class BrandCatalogueController extends Controller
         $newUrl = $this->nullTrim($data['url'] ?? null);
         $defaultLine = $brand->defaultLine;
 
-        DB::transaction(function () use ($brand, $defaultLine, $oldName, $oldNote, $oldUrl, $newName, $newNote, $newUrl, $data) {
+        DB::transaction(function () use ($brand, $defaultLine, $oldNote, $oldUrl, $newName, $newNote, $newUrl, $data) {
             $brand->update([
                 'name' => $newName,
                 'slug' => $this->uniqueSlug('brand_catalogue_brands', 'brand_catalogue_id', $brand->brand_catalogue_id, $newName, $brand->id),
@@ -1282,7 +1287,7 @@ class BrandCatalogueController extends Controller
      * Chrome extension API — returns the scaffolding (brands, product types, materials)
      * for a catalogue so dropdowns can cascade properly.
      */
-    public function apiScaffolding(BrandCatalogue $catalogue): \Illuminate\Http\JsonResponse
+    public function apiScaffolding(BrandCatalogue $catalogue): JsonResponse
     {
         $catalogue->load([
             'brands' => fn ($q) => $q->orderBy('name'),
@@ -1329,7 +1334,7 @@ class BrandCatalogueController extends Controller
      * Chrome extension API — receives captured product data and creates
      * styles (+ variants + options) in the appropriate place in the hierarchy.
      */
-    public function apiCaptureStore(Request $request): \Illuminate\Http\JsonResponse
+    public function apiCaptureStore(Request $request): JsonResponse
     {
         $products = $request->input('products', []);
         $created = [];
@@ -1340,7 +1345,7 @@ class BrandCatalogueController extends Controller
             $materialId = $product['materialId'] ?? null;
             $materialName = $this->nullTrim($product['materialName'] ?? null);
 
-            if ((!$brandId && !$productTypeId && !$materialId) || (!$productTypeId && !$materialId)) {
+            if ((! $brandId && ! $productTypeId && ! $materialId) || (! $productTypeId && ! $materialId)) {
                 continue;
             }
 
@@ -1348,7 +1353,7 @@ class BrandCatalogueController extends Controller
             $productType = $productTypeId ? BrandCatalogueProductType::find($productTypeId) : $material?->productType;
             $brand = $brandId ? BrandCatalogueBrand::find($brandId) : $productType?->brand;
 
-            if (!$brand || !$productType) {
+            if (! $brand || ! $productType) {
                 continue;
             }
 
@@ -1368,7 +1373,7 @@ class BrandCatalogueController extends Controller
             ]);
 
             // Create variants and options
-            if (!empty($product['variants'])) {
+            if (! empty($product['variants'])) {
                 foreach ($product['variants'] as $sortIdx => $variant) {
                     $vg = BrandCatalogueVariant::create([
                         'brand_catalogue_style_id' => $style->id,
@@ -1407,7 +1412,7 @@ class BrandCatalogueController extends Controller
         ]);
     }
 
-    public function exportJson(BrandCatalogue $catalogue): \Illuminate\Http\JsonResponse
+    public function exportJson(BrandCatalogue $catalogue): JsonResponse
     {
         $catalogue->load([
             'brands.lines.productTypes.styles.variants.options.images',
@@ -1712,10 +1717,10 @@ class BrandCatalogueController extends Controller
                 return $brand->lines
                     ->reject(fn (BrandCatalogueLine $line) => $line->is_default && $hasNamedLines && (int) $line->product_types_count === 0)
                     ->map(function (BrandCatalogueLine $line) use ($brand) {
-                    $line->setRelation('brand', $brand);
+                        $line->setRelation('brand', $brand);
 
-                    return $line;
-                });
+                        return $line;
+                    });
             })
             ->sortBy(fn (BrandCatalogueLine $line) => sprintf(
                 '%04d:%s:%d:%04d:%s',
@@ -2220,16 +2225,9 @@ class BrandCatalogueController extends Controller
 
     private function publishedFamilyForStyle(int $styleId): ?ProductFamily
     {
-        if ($styleId <= 0) {
-            return null;
-        }
-
-        return ProductFamily::query()
-            ->where('brand_catalogue_style_id', $styleId)
-            ->withCount('products')
-            ->orderByRaw('catalogue_scope_key IS NULL DESC')
-            ->orderBy('id')
-            ->first();
+        return RetailStyleFamilyCatalogue::primaryFamily(
+            RetailStyleFamilyCatalogue::familiesForStyle($styleId),
+        );
     }
 
     /**
@@ -2238,20 +2236,7 @@ class BrandCatalogueController extends Controller
      */
     private function publishedFamiliesForStyles(array $styleIds): Collection
     {
-        $styleIds = collect($styleIds)->map(fn (mixed $id): int => (int) $id)->filter()->unique()->values();
-
-        if ($styleIds->isEmpty()) {
-            return collect();
-        }
-
-        return ProductFamily::query()
-            ->whereIn('brand_catalogue_style_id', $styleIds->all())
-            ->withCount('products')
-            ->orderByRaw('catalogue_scope_key IS NULL DESC')
-            ->orderBy('id')
-            ->get()
-            ->groupBy('brand_catalogue_style_id')
-            ->map(fn (Collection $families): ProductFamily => $families->first());
+        return RetailStyleFamilyCatalogue::primaryFamilyByStyleIds($styleIds);
     }
 
     /**

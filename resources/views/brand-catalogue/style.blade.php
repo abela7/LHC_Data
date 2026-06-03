@@ -266,17 +266,24 @@
             @php
                 $directSkuImageCount = $style->skus->sum(fn ($sku) => $sku->images->count());
                 $missingSkuImages = $style->skus->filter(fn ($sku) => $sku->images->isEmpty())->count();
+                $retailFamilies = $retailFamilies ?? collect();
+                $retailSkuTotal = (int) $retailFamilies->sum('products_count');
+                $retailFamilyCount = $retailFamilies->count();
             @endphp
 
-            <details class="sw-publish-dock {{ $publishedFamily ? 'is-published' : 'is-draft' }}" data-sw-fragment="publish">
+            <details class="sw-publish-dock {{ $retailSkuTotal > 0 ? 'is-published' : 'is-draft' }}" data-sw-fragment="publish">
                 <summary class="sw-publish-dock-main">
                     <div class="sw-publish-dock-title">
                         <span class="sw-publish-state-dot" aria-hidden="true"></span>
                         <div>
                             <h2>Real product</h2>
                             <p>
-                                @if ($publishedFamily)
-                                    Published family with {{ $publishedFamily->products_count }} sellable product{{ $publishedFamily->products_count === 1 ? '' : 's' }}.
+                                @if ($retailSkuTotal > 0)
+                                    @if ($retailFamilyCount > 1)
+                                        {{ $retailFamilyCount }} retail families with {{ $retailSkuTotal }} sellable SKU{{ $retailSkuTotal === 1 ? '' : 's' }} (split buckets).
+                                    @else
+                                        Published family with {{ $retailSkuTotal }} sellable product{{ $retailSkuTotal === 1 ? '' : 's' }}.
+                                    @endif
                                 @else
                                     Ready to create final POS, inventory and ecommerce product records.
                                 @endif
@@ -306,7 +313,7 @@
                         </div>
 
                         <div class="sw-publish-dock-actions">
-                            @if ($publishedFamily)
+                            @if ($retailSkuTotal > 0 && $retailFamilyCount === 1 && $publishedFamily)
                                 <a href="{{ route('retail-products.families.show', $publishedFamily) }}" class="sw-publish-action-secondary">
                                     View real products
                                 </a>
@@ -319,6 +326,29 @@
                             </form>
                         </div>
                     </div>
+
+                    @if ($retailFamilies->isNotEmpty())
+                        <div class="sw-retail-families">
+                            <h4 class="sw-retail-families-title">Retail families for this style</h4>
+                            <p class="sw-retail-families-intro">
+                                Splitting a SKU group with <strong>+</strong> creates another family here. Open the one you need.
+                            </p>
+                            <ul class="sw-retail-families-list">
+                                @foreach ($retailFamilies as $retailFamily)
+                                    @php
+                                        $scopeLabel = \App\Support\RetailStyleFamilyCatalogue::scopeLabel($retailFamily->catalogue_scope_key);
+                                        $isCurrentPrimary = (int) ($publishedFamily?->id ?? 0) === (int) $retailFamily->id;
+                                    @endphp
+                                    <li class="sw-retail-families-item {{ $isCurrentPrimary ? 'is-primary' : '' }}">
+                                        <a href="{{ route('retail-products.families.show', $retailFamily) }}" class="sw-retail-families-link">
+                                            <strong>{{ $scopeLabel }}</strong>
+                                            <span>{{ number_format($retailFamily->products_count) }} SKU{{ $retailFamily->products_count === 1 ? '' : 's' }}</span>
+                                        </a>
+                                    </li>
+                                @endforeach
+                            </ul>
+                        </div>
+                    @endif
 
                     <div class="sw-publish-setup">
                         <div class="sw-publish-setup-heading">
@@ -706,8 +736,10 @@
             @php
                 $skuListHint = $style->skus->isEmpty()
                     ? 'Add variant options, then create SKUs'
-                    : ($publishedFamily
-                        ? number_format($publishedFamily->products_count).' in retail'
+                    : ($retailSkuTotal > 0
+                        ? ($retailFamilyCount > 1
+                            ? number_format($retailSkuTotal).' SKUs in '.$retailFamilyCount.' retail families'
+                            : number_format($retailSkuTotal).' in retail')
                         : 'Ready to publish to retail');
             @endphp
             <details class="sw-section-accordion sw-sku-list-section" data-sw-fragment="skus" open>
@@ -742,10 +774,12 @@
                             </label>
                         @endif
                         <div class="sw-sku-publish-row">
-                            @if ($publishedFamily)
+                            @if ($retailSkuTotal > 0 && $retailFamilyCount === 1 && $publishedFamily)
                                 <a href="{{ route('retail-products.families.show', $publishedFamily) }}" class="sw-btn sw-btn-sm sw-sku-view-retail">
                                     View retail ({{ $publishedFamily->products_count }})
                                 </a>
+                            @elseif ($retailFamilyCount > 1)
+                                <span class="sw-sku-retail-hint">Use <strong>Retail families</strong> above to open each split family.</span>
                             @endif
                             <form method="POST" action="{{ route('brand-catalogue.styles.publish-products', $style) }}" class="sw-sku-publish-form">
                                 @csrf

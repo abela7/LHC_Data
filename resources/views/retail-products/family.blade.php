@@ -180,6 +180,35 @@
             <span class="rfm-crumbs-current" data-rfm-display-name-crumb>{{ $family->display_family_name }}</span>
         </nav>
 
+        @if (($styleRetailFamilies ?? collect())->count() > 1)
+            <nav class="rfm-style-families" aria-label="Retail families for this catalogue style">
+                <span class="rfm-style-families-label">This style:</span>
+                @foreach ($styleRetailFamilies as $styleFamily)
+                    @php
+                        $chipLabel = \App\Support\RetailStyleFamilyCatalogue::scopeLabel($styleFamily->catalogue_scope_key);
+                    @endphp
+                    <a href="{{ route('retail-products.families.show', $styleFamily) }}"
+                       class="rfm-style-families-chip {{ (int) $styleFamily->id === (int) $family->id ? 'is-active' : '' }}">
+                        {{ $chipLabel }}
+                        <em>{{ $styleFamily->products_count }}</em>
+                    </a>
+                @endforeach
+            </nav>
+        @elseif (filled($family->catalogue_scope_key))
+            <p class="rfm-style-scope-note">
+                Split family bucket: <strong>{{ $styleRetailScopeLabel ?? '' }}</strong>.
+                @if ($family->catalogueStyle)
+                    <a href="{{ route('brand-catalogue.styles.show', [
+                        $family->brand_catalogue_id,
+                        $family->brand_catalogue_brand_id,
+                        $family->brand_catalogue_line_id,
+                        $family->brand_catalogue_product_type_id,
+                        $family->catalogueStyle,
+                    ]) }}?catalogue=1">View all families on style</a>
+                @endif
+            </p>
+        @endif
+
         {{-- Compact sticky family hero --}}
         <header class="rfm-hero" data-rfm-hero>
             <div class="rfm-hero-main">

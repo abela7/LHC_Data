@@ -9491,6 +9491,44 @@
         color: var(--color-accent);
     }
 
+    .rfm-style-families {
+        @apply flex flex-wrap items-center gap-2 rounded-2xl border px-3 py-2;
+        border-color: rgba(42, 92, 138, 0.18);
+        background: #f5f9ff;
+    }
+
+    .rfm-style-families-label {
+        @apply text-[11px] font-bold uppercase tracking-wide;
+        color: #5a6d7d;
+    }
+
+    .rfm-style-families-chip {
+        @apply inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold no-underline;
+        border-color: rgba(42, 92, 138, 0.2);
+        background: #fff;
+        color: #2a5c8a;
+    }
+
+    .rfm-style-families-chip.is-active {
+        border-color: #2a5c8a;
+        background: #2a5c8a;
+        color: #fff;
+    }
+
+    .rfm-style-families-chip em {
+        @apply text-[10px] font-bold not-italic opacity-80;
+    }
+
+    .rfm-style-scope-note {
+        @apply text-xs leading-5;
+        color: #5a6d7d;
+    }
+
+    .rfm-style-scope-note a {
+        @apply font-semibold;
+        color: #2a5c8a;
+    }
+
     .rfm-crumbs-current {
         @apply font-semibold;
         color: var(--color-ink);
@@ -14926,6 +14964,57 @@
 
     .sw-publish-dock-actions {
         @apply grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:justify-end;
+    }
+
+    .sw-retail-families {
+        @apply grid gap-2 rounded-2xl border p-3 sm:p-4;
+        border-color: rgba(42, 92, 138, 0.18);
+        background: rgba(245, 249, 255, 0.9);
+    }
+
+    .sw-retail-families-title {
+        @apply text-sm font-bold;
+        color: #2a5c8a;
+    }
+
+    .sw-retail-families-intro {
+        @apply text-xs leading-5;
+        color: #5a6d7d;
+    }
+
+    .sw-retail-families-list {
+        @apply grid gap-1.5;
+        list-style: none;
+        padding: 0;
+        margin: 0;
+    }
+
+    .sw-retail-families-link {
+        @apply flex items-center justify-between gap-3 rounded-xl border px-3 py-2 text-sm transition;
+        border-color: rgba(42, 92, 138, 0.16);
+        background: #fff;
+        color: #1f3648;
+        text-decoration: none;
+    }
+
+    .sw-retail-families-link:hover,
+    .sw-retail-families-link:focus-visible {
+        border-color: #2a5c8a;
+        outline: none;
+    }
+
+    .sw-retail-families-item.is-primary .sw-retail-families-link {
+        border-color: rgba(29, 111, 95, 0.35);
+    }
+
+    .sw-retail-families-link span {
+        @apply text-xs font-semibold;
+        color: #2a5c8a;
+    }
+
+    .sw-sku-retail-hint {
+        @apply text-xs leading-snug;
+        color: #5a6d7d;
     }
 
     .sw-publish-dock-actions form {
