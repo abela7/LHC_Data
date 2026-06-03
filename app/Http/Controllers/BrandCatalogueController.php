@@ -371,6 +371,7 @@ class BrandCatalogueController extends Controller
         ]);
 
         $retailFamilies = RetailStyleFamilyCatalogue::familiesForStyle((int) $style->id);
+        $retailVariantAxes = RetailStyleFamilyCatalogue::catalogueVariantAxes($style, $style->variants);
         $retailNavItems = RetailStyleFamilyCatalogue::styleWorkspaceRetailNav(
             $style,
             $style->variants,
@@ -408,6 +409,9 @@ class BrandCatalogueController extends Controller
             'publishedFamily' => $publishedFamily,
             'retailFamilies' => $retailFamilies,
             'retailNavItems' => $retailNavItems,
+            'retailMainVariant' => $retailVariantAxes['main'],
+            'retailCommonVariantIds' => $retailVariantAxes['common_variant_ids'],
+            'retailSubVariantIds' => $retailVariantAxes['sub_variant_ids'],
             'retailFamilyCount' => $retailNavItems->isNotEmpty()
                 ? $retailNavItems->count()
                 : $retailFamilies->count(),

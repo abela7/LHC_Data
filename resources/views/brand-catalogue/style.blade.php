@@ -84,7 +84,9 @@
 
             @if ($retailNavItems->isNotEmpty())
                 <nav class="sw-style-retail-nav" aria-label="Retail sellables for this style">
-                    <span class="sw-style-retail-nav-label">Retail by option</span>
+                    <span class="sw-style-retail-nav-label">
+                        Retail by {{ $retailMainVariant?->name ?? 'main variant' }}
+                    </span>
                     <div class="sw-style-retail-nav-pills">
                         @foreach ($retailNavItems as $retailNavItem)
                             @php
@@ -353,7 +355,7 @@
 
                     @if ($retailFamilyCount > 1)
                         <p class="sw-publish-split-hint">
-                            Sellables are grouped by catalogue option (e.g. 16″, 20″) — use <strong>Retail by option</strong> in the sidebar.
+                            Sellables are grouped by <strong>{{ $retailMainVariant?->name ?? 'main variant' }}</strong> (e.g. 16″, 20″) — colours and pack stay inside each length in retail.
                         </p>
                     @endif
 
@@ -500,6 +502,13 @@
                                         <h3>{{ $variant->name }}</h3>
                                         <span class="sw-variant-meta">
                                             <span class="bc-vtype-badge bc-vtype-{{ $variant->variant_type }}">{{ $variant->variant_type === 'count' ? 'pack count' : str_replace('_', ' ', $variant->variant_type) }}</span>
+                                            @if ($retailMainVariant && (int) $retailMainVariant->id === (int) $variant->id)
+                                                <span class="sw-variant-axis-badge sw-variant-axis-main">Main axis</span>
+                                            @elseif (in_array((int) $variant->id, $retailCommonVariantIds, true))
+                                                <span class="sw-variant-axis-badge sw-variant-axis-common">Shared</span>
+                                            @else
+                                                <span class="sw-variant-axis-badge sw-variant-axis-sub">Sub</span>
+                                            @endif
                                             <span class="sw-opt-count">{{ $variant->options->count() }} option{{ $variant->options->count() === 1 ? '' : 's' }}</span>
                                         </span>
                                     </div>
@@ -598,27 +607,30 @@
                                                             <span class="sw-opt-sort-badge">#{{ $option->sort_order }}</span>
                                                         </span>
                                                         @php
+                                                            $isMainVariantAxis = $retailMainVariant && (int) $retailMainVariant->id === (int) $variant->id;
                                                             $optionRetail = $retailByCatalogueOptionId[$option->id] ?? null;
                                                         @endphp
-                                                        @if ($optionRetail)
-                                                            <a href="{{ route('retail-products.families.show', $optionRetail['family_id']) }}"
-                                                               class="sw-opt-sellable-btn"
-                                                               title="Open sellable products for {{ $option->label }}"
-                                                               onclick="event.stopPropagation()">
-                                                                Sellable <em>{{ $optionRetail['products_count'] }}</em>
-                                                            </a>
-                                                        @else
-                                                            <form method="POST"
-                                                                  action="{{ route('brand-catalogue.variant-options.publish-retail', $option) }}"
-                                                                  class="sw-opt-sellable-form"
-                                                                  onclick="event.stopPropagation()">
-                                                                @csrf
-                                                                <button type="submit"
-                                                                        class="sw-opt-sellable-btn sw-opt-sellable-btn--create"
-                                                                        title="Create sellable family for {{ $option->label }}">
-                                                                    + Sellable
-                                                                </button>
-                                                            </form>
+                                                        @if ($isMainVariantAxis)
+                                                            @if ($optionRetail)
+                                                                <a href="{{ route('retail-products.families.show', $optionRetail['family_id']) }}"
+                                                                   class="sw-opt-sellable-btn"
+                                                                   title="Open sellable products for {{ $option->label }}"
+                                                                   onclick="event.stopPropagation()">
+                                                                    Sellable <em>{{ $optionRetail['products_count'] }}</em>
+                                                                </a>
+                                                            @else
+                                                                <form method="POST"
+                                                                      action="{{ route('brand-catalogue.variant-options.publish-retail', $option) }}"
+                                                                      class="sw-opt-sellable-form"
+                                                                      onclick="event.stopPropagation()">
+                                                                    @csrf
+                                                                    <button type="submit"
+                                                                            class="sw-opt-sellable-btn sw-opt-sellable-btn--create"
+                                                                            title="Publish sellables for {{ $option->label }} ({{ $retailMainVariant->name }})">
+                                                                        + Sellable
+                                                                    </button>
+                                                                </form>
+                                                            @endif
                                                         @endif
                                                         <svg class="sw-opt-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="m6 9 6 6 6-6"/></svg>
                                                         <form method="POST"
@@ -809,7 +821,7 @@
                                     View retail ({{ $publishedFamily->products_count }})
                                 </a>
                             @elseif ($retailFamilyCount > 1)
-                                <span class="sw-sku-retail-hint">Open a length from <strong>Retail by option</strong> in the sidebar.</span>
+                                <span class="sw-sku-retail-hint">Open a {{ strtolower($retailMainVariant?->name ?? 'main') }} from the sidebar retail pills.</span>
                             @endif
                             <form method="POST" action="{{ route('brand-catalogue.styles.publish-products', $style) }}" class="sw-sku-publish-form">
                                 @csrf

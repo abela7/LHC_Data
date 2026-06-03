@@ -119,25 +119,119 @@ final class RetailStyleFamilyCatalogue
             $families = self::familiesForStyle($styleId, repairOrphans: false);
         }
 
+        $mainVariant = self::resolveMainCatalogueVariant($styleId, $catalogueVariants);
+
+        if ($mainVariant === null) {
+            return [];
+        }
+
+        $mainVariant->loadMissing('options');
+
         $map = [];
 
-        foreach ($catalogueVariants as $variant) {
-            foreach ($variant->options as $option) {
-                $family = self::resolveFamilyForCatalogueOption($families, $variant->name, $option);
+        foreach ($mainVariant->options as $option) {
+            $family = self::resolveFamilyForCatalogueOption($families, $mainVariant->name, $option);
 
-                if ($family === null) {
-                    continue;
-                }
-
-                $map[(int) $option->id] = [
-                    'family_id' => (int) $family->id,
-                    'products_count' => (int) $family->products_count,
-                    'label' => $option->label,
-                ];
+            if ($family === null) {
+                continue;
             }
+
+            $map[(int) $option->id] = [
+                'family_id' => (int) $family->id,
+                'products_count' => self::retailProductCountForCatalogueOption($family, $option),
+                'label' => $option->label,
+            ];
         }
 
         return $map;
+    }
+
+    /**
+     * Main / common / sub axes for a catalogue style (mirrors retail family SKU grouping).
+     *
+     * @param  Collection<int, BrandCatalogueVariant>  $catalogueVariants
+     * @return array{
+     *     main: ?BrandCatalogueVariant,
+     *     common_variant_ids: array<int, int>,
+     *     sub_variant_ids: array<int, int>,
+     * }
+     */
+    public static function catalogueVariantAxes(
+        BrandCatalogueStyle $style,
+        Collection $catalogueVariants,
+    ): array {
+        $style->loadMissing(['skus.optionValues']);
+        $skus = $style->skus;
+        $skuCount = $skus->count();
+
+        if ($catalogueVariants->isEmpty()) {
+            return [
+                'main' => null,
+                'common_variant_ids' => [],
+                'sub_variant_ids' => [],
+            ];
+        }
+
+        $commonVariantIds = [];
+        $scored = [];
+
+        foreach ($catalogueVariants as $variant) {
+            $distinct = self::distinctCatalogueOptionsOnSkus($skus, (int) $variant->id);
+            $isCommon = $skuCount > 1 && $distinct <= 1;
+
+            if ($isCommon) {
+                $commonVariantIds[] = (int) $variant->id;
+
+                continue;
+            }
+
+            $scored[] = [
+                'variant' => $variant,
+                'score' => self::scoreCatalogueMainVariantCandidate($variant, $distinct, $skuCount),
+            ];
+        }
+
+        $best = collect($scored)
+            ->sortByDesc('score')
+            ->first(fn (array $row): bool => $row['score'] > 0);
+
+        $main = $best['variant'] ?? $catalogueVariants->sortBy('sort_order')->first();
+        $mainId = $main instanceof BrandCatalogueVariant ? (int) $main->id : 0;
+
+        $subVariantIds = $catalogueVariants
+            ->pluck('id')
+            ->map(fn (mixed $id): int => (int) $id)
+            ->filter(fn (int $id): bool => $id !== $mainId && ! in_array($id, $commonVariantIds, true))
+            ->values()
+            ->all();
+
+        return [
+            'main' => $main instanceof BrandCatalogueVariant ? $main : null,
+            'common_variant_ids' => $commonVariantIds,
+            'sub_variant_ids' => $subVariantIds,
+        ];
+    }
+
+    /**
+     * @param  Collection<int, BrandCatalogueVariant>  $catalogueVariants
+     */
+    public static function resolveMainCatalogueVariant(
+        int $styleId,
+        Collection $catalogueVariants,
+    ): ?BrandCatalogueVariant {
+        if ($styleId <= 0 || $catalogueVariants->isEmpty()) {
+            return null;
+        }
+
+        $style = BrandCatalogueStyle::query()
+            ->with(['skus.optionValues'])
+            ->find($styleId);
+
+        if (! $style) {
+            return null;
+        }
+
+        return self::catalogueVariantAxes($style, $catalogueVariants)['main'];
     }
 
     /**
@@ -195,8 +289,9 @@ final class RetailStyleFamilyCatalogue
     }
 
     /**
-     * Style workspace sidebar: one pill per catalogue variant option on this style
-     * (16", 20", …), not one row per internal retail family split.
+     * Style workspace sidebar: one pill per option on the main variant axis only
+     * (e.g. Length 16", 20"). Sub variants (colour) and common variants (3X pack)
+     * stay inside each retail family — not separate pills.
      *
      * @param  Collection<int, BrandCatalogueVariant>  $catalogueVariants
      * @param  Collection<int, ProductFamily>  $families
@@ -214,46 +309,52 @@ final class RetailStyleFamilyCatalogue
         $style->loadMissing(['skus.optionValues']);
         $families->loadMissing(['variantGroups.options']);
 
+        $mainVariant = self::catalogueVariantAxes($style, $catalogueVariants)['main'];
+
+        if ($mainVariant === null) {
+            return collect();
+        }
+
         $items = collect();
 
-        foreach ($catalogueVariants->sortBy('sort_order') as $variant) {
-            foreach ($variant->options->sortBy('sort_order') as $option) {
-                $family = self::resolveFamilyForCatalogueOption($families, $variant->name, $option);
+        $mainVariant->loadMissing('options');
 
-                if (! $family instanceof ProductFamily) {
-                    continue;
-                }
+        foreach ($mainVariant->options->sortBy('sort_order') as $option) {
+            $family = self::resolveFamilyForCatalogueOption($families, $mainVariant->name, $option);
 
-                $count = self::retailProductCountForCatalogueOption($family, $option);
+            if (! $family instanceof ProductFamily) {
+                continue;
+            }
 
-                if ($count === 0) {
-                    $mainFamily = $families->first(
-                        fn (ProductFamily $candidate): bool => ! filled($candidate->catalogue_scope_key),
-                    );
+            $count = self::retailProductCountForCatalogueOption($family, $option);
 
-                    if ($mainFamily instanceof ProductFamily && $mainFamily->id !== $family->id) {
-                        $mainCount = self::retailProductCountForCatalogueOption($mainFamily, $option);
+            if ($count === 0) {
+                $mainFamily = $families->first(
+                    fn (ProductFamily $candidate): bool => ! filled($candidate->catalogue_scope_key),
+                );
 
-                        if ($mainCount > 0) {
-                            $family = $mainFamily;
-                            $count = $mainCount;
-                        }
+                if ($mainFamily instanceof ProductFamily && $mainFamily->id !== $family->id) {
+                    $mainCount = self::retailProductCountForCatalogueOption($mainFamily, $option);
+
+                    if ($mainCount > 0) {
+                        $family = $mainFamily;
+                        $count = $mainCount;
                     }
                 }
-
-                $catalogueSkuCount = count(self::catalogueSkuIdsForOption($style, $option));
-
-                if ($count === 0 && $catalogueSkuCount === 0) {
-                    continue;
-                }
-
-                $items->push([
-                    'label' => $option->label,
-                    'family' => $family,
-                    'products_count' => $count,
-                    'catalogue_option_id' => (int) $option->id,
-                ]);
             }
+
+            $catalogueSkuCount = count(self::catalogueSkuIdsForOption($style, $option));
+
+            if ($count === 0 && $catalogueSkuCount === 0) {
+                continue;
+            }
+
+            $items->push([
+                'label' => $option->label,
+                'family' => $family,
+                'products_count' => $count,
+                'catalogue_option_id' => (int) $option->id,
+            ]);
         }
 
         $mainFamily = $families->first(
@@ -377,6 +478,78 @@ final class RetailStyleFamilyCatalogue
 
                 return [$styleId => $primary];
             });
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection<int, \App\Models\BrandCatalogueSku>  $skus
+     */
+    private static function distinctCatalogueOptionsOnSkus(Collection $skus, int $variantId): int
+    {
+        return $skus
+            ->flatMap(fn ($sku) => $sku->optionValues->where('variant_id', $variantId)->pluck('id'))
+            ->unique()
+            ->count();
+    }
+
+    private static function scoreCatalogueMainVariantCandidate(
+        BrandCatalogueVariant $variant,
+        int $distinct,
+        int $skuCount,
+    ): int {
+        $score = 0;
+
+        if (self::isLengthCatalogueVariant($variant)) {
+            $score += 1000;
+        }
+
+        if ($variant->variant_type === 'measurement') {
+            $score += 500;
+        }
+
+        if ($distinct >= 2) {
+            $score += 200 + min($distinct, 40);
+        } elseif ($skuCount <= 1) {
+            $score += 20;
+        } else {
+            $score += 10;
+        }
+
+        $score += max(0, 90 - (int) $variant->sort_order);
+
+        if (self::isTypicalSubCatalogueVariant($variant)) {
+            $score -= 80;
+        }
+
+        if (in_array($variant->variant_type, ['colour_name', 'colour_code', 'short_code', 'count'], true)) {
+            $score -= 100;
+        }
+
+        return $score;
+    }
+
+    private static function isLengthCatalogueVariant(BrandCatalogueVariant $variant): bool
+    {
+        $name = Str::lower(trim($variant->name));
+        $type = Str::lower(trim((string) $variant->variant_type));
+
+        if ($name === 'length' || $type === 'measurement') {
+            return true;
+        }
+
+        return (bool) preg_match('/\b(length|len)\b/i', $variant->name);
+    }
+
+    private static function isTypicalSubCatalogueVariant(BrandCatalogueVariant $variant): bool
+    {
+        $name = Str::lower(trim($variant->name));
+
+        foreach (['colour', 'color', 'width', 'pack', 'package', 'texture', 'bundle'] as $needle) {
+            if ($name === $needle || str_contains($name, $needle)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static function relinkSplitOrphansForStyle(int $styleId): void

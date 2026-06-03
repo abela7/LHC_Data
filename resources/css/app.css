@@ -15746,6 +15746,25 @@
         color: #a09a90;
     }
 
+    .sw-variant-axis-badge {
+        @apply rounded-md px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.06em];
+    }
+
+    .sw-variant-axis-main {
+        background: rgba(29, 111, 95, 0.12);
+        color: #1d6f5f;
+    }
+
+    .sw-variant-axis-common {
+        background: rgba(107, 114, 128, 0.12);
+        color: #6b7280;
+    }
+
+    .sw-variant-axis-sub {
+        background: rgba(180, 83, 9, 0.1);
+        color: #9a6700;
+    }
+
     .sw-variant-actions {
         @apply flex items-center gap-1.5 ml-auto flex-shrink-0;
     }
