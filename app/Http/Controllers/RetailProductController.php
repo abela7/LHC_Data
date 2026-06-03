@@ -33,6 +33,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
@@ -2096,7 +2097,7 @@ class RetailProductController extends Controller
         }
 
         foreach ($sourceFamily->media as $media) {
-            ProductMedia::query()->create([
+            $mediaRow = [
                 'product_family_id' => $targetFamily->id,
                 'product_id' => null,
                 'catalogue_image_id' => $media->catalogue_image_id,
@@ -2106,11 +2107,19 @@ class RetailProductController extends Controller
                 'storage_path' => $media->storage_path,
                 'mime_type' => $media->mime_type,
                 'file_size' => $media->file_size,
-                'usage_context' => $media->usage_context,
                 'is_primary' => $media->is_primary,
-                'is_offline_ready' => $media->is_offline_ready,
                 'sort_order' => $media->sort_order,
-            ]);
+            ];
+
+            if (Schema::hasColumn('product_media', 'usage_context')) {
+                $mediaRow['usage_context'] = $media->usage_context ?? 'all';
+            }
+
+            if (Schema::hasColumn('product_media', 'is_offline_ready')) {
+                $mediaRow['is_offline_ready'] = (bool) $media->is_offline_ready;
+            }
+
+            ProductMedia::query()->create($mediaRow);
         }
 
         if ($sourceFamily->ecommerceProfile) {
@@ -2259,8 +2268,9 @@ class RetailProductController extends Controller
         }
 
         $scopeKey = $this->splitFamilyScopeKey($splitGroup, $option);
+        $hasScopeKeyColumn = Schema::hasColumn('product_families', 'catalogue_scope_key');
 
-        if ($family->brand_catalogue_style_id) {
+        if ($hasScopeKeyColumn && $family->brand_catalogue_style_id) {
             $scopeTaken = ProductFamily::query()
                 ->where('brand_catalogue_style_id', $family->brand_catalogue_style_id)
                 ->where('catalogue_scope_key', $scopeKey)
@@ -2276,14 +2286,13 @@ class RetailProductController extends Controller
 
         $slugSeed = trim($family->family_name).' '.$option->label;
 
-        $targetFamily = ProductFamily::query()->create([
+        $targetAttributes = [
             'brand_id' => $family->brand_id,
             'brand_catalogue_id' => $family->brand_catalogue_id,
             'brand_catalogue_brand_id' => $family->brand_catalogue_brand_id,
             'brand_catalogue_line_id' => $family->brand_catalogue_line_id,
             'brand_catalogue_product_type_id' => $family->brand_catalogue_product_type_id,
             'brand_catalogue_style_id' => $family->brand_catalogue_style_id,
-            'catalogue_scope_key' => $family->brand_catalogue_style_id ? $scopeKey : $family->catalogue_scope_key,
             'root_catalogue_name' => $family->root_catalogue_name,
             'brand_name' => $family->brand_name,
             'line_name' => $family->line_name,
@@ -2295,7 +2304,13 @@ class RetailProductController extends Controller
             'status' => $family->status,
             'published_at' => $family->published_at,
             'sort_order' => ((int) ProductFamily::query()->max('sort_order')) + 1,
-        ]);
+        ];
+
+        if ($hasScopeKeyColumn && $family->brand_catalogue_style_id) {
+            $targetAttributes['catalogue_scope_key'] = $scopeKey;
+        }
+
+        $targetFamily = ProductFamily::query()->create($targetAttributes);
 
         $maps = $this->replicateFamilyVariantStructure($family, $targetFamily, (int) $splitGroup->id);
         $this->replicateFamilyLevelRecords($family, $targetFamily);
