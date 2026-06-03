@@ -14966,50 +14966,51 @@
         @apply grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:justify-end;
     }
 
-    .sw-retail-families {
-        @apply grid gap-2 rounded-2xl border p-3 sm:p-4;
-        border-color: rgba(42, 92, 138, 0.18);
-        background: rgba(245, 249, 255, 0.9);
-    }
-
-    .sw-retail-families-title {
-        @apply text-sm font-bold;
+    .sw-stat-retail .sw-stat-num {
         color: #2a5c8a;
     }
 
-    .sw-retail-families-intro {
-        @apply text-xs leading-5;
+    .sw-style-retail-nav {
+        @apply grid gap-2 rounded-2xl border p-3;
+        border-color: rgba(42, 92, 138, 0.16);
+        background: rgba(245, 249, 255, 0.65);
+    }
+
+    .sw-style-retail-nav-label {
+        @apply text-[10px] font-extrabold uppercase tracking-wide;
         color: #5a6d7d;
     }
 
-    .sw-retail-families-list {
-        @apply grid gap-1.5;
-        list-style: none;
-        padding: 0;
-        margin: 0;
+    .sw-style-retail-nav-pills {
+        @apply flex flex-wrap gap-1.5;
     }
 
-    .sw-retail-families-link {
-        @apply flex items-center justify-between gap-3 rounded-xl border px-3 py-2 text-sm transition;
-        border-color: rgba(42, 92, 138, 0.16);
+    .sw-style-retail-pill {
+        @apply inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-bold no-underline;
+        border-color: rgba(42, 92, 138, 0.22);
         background: #fff;
-        color: #1f3648;
-        text-decoration: none;
+        color: #2a5c8a;
     }
 
-    .sw-retail-families-link:hover,
-    .sw-retail-families-link:focus-visible {
+    .sw-style-retail-pill em {
+        @apply text-[10px] font-bold not-italic opacity-75;
+    }
+
+    .sw-style-retail-pill:hover,
+    .sw-style-retail-pill:focus-visible {
         border-color: #2a5c8a;
         outline: none;
     }
 
-    .sw-retail-families-item.is-primary .sw-retail-families-link {
-        border-color: rgba(29, 111, 95, 0.35);
+    .sw-style-retail-pill.is-empty {
+        opacity: 0.55;
     }
 
-    .sw-retail-families-link span {
-        @apply text-xs font-semibold;
-        color: #2a5c8a;
+    .sw-publish-split-hint {
+        @apply rounded-xl border px-3 py-2 text-xs leading-5;
+        border-color: rgba(42, 92, 138, 0.16);
+        background: rgba(245, 249, 255, 0.8);
+        color: #4a5f6f;
     }
 
     .sw-sku-retail-hint {

@@ -2296,10 +2296,21 @@ class RetailProductController extends Controller
                 throw $exception;
             }
 
-            $targetAttributes['brand_catalogue_style_id'] = null;
-            if ($hasScopeKeyColumn) {
-                unset($targetAttributes['catalogue_scope_key']);
+            if ($hasScopeKeyColumn && $sourceFamily->brand_catalogue_style_id) {
+                $targetAttributes['brand_catalogue_style_id'] = $sourceFamily->brand_catalogue_style_id;
+                $targetAttributes['catalogue_scope_key'] = $scopeKey;
+
+                try {
+                    return ProductFamily::query()->create($targetAttributes);
+                } catch (QueryException $retryException) {
+                    $targetAttributes['catalogue_scope_key'] = Str::limit($scopeKey.'-'.$sourceFamily->id, 120, '');
+
+                    return ProductFamily::query()->create($targetAttributes);
+                }
             }
+
+            $targetAttributes['brand_catalogue_style_id'] = null;
+            unset($targetAttributes['catalogue_scope_key']);
 
             return ProductFamily::query()->create($targetAttributes);
         }

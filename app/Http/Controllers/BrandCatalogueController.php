@@ -397,6 +397,8 @@ class BrandCatalogueController extends Controller
             'style' => $style,
             'publishedFamily' => $publishedFamily,
             'retailFamilies' => $retailFamilies,
+            'retailFamilyCount' => $retailFamilies->count(),
+            'retailSkuTotal' => (int) $retailFamilies->sum('products_count'),
             'materialOptions' => $this->materialOptions(),
             'productTypeOptions' => $line->productTypes,
             'optionImageRoleOptions' => $this->optionImageRoleOptions(),

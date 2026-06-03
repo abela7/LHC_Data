@@ -74,7 +74,32 @@
                     <span class="sw-stat-num">{{ $style->images->count() }}</span>
                     <span class="sw-stat-label">Images</span>
                 </div>
+                @if ($retailFamilies->isNotEmpty())
+                    <div class="sw-stat sw-stat-retail">
+                        <span class="sw-stat-num">{{ $retailSkuTotal }}</span>
+                        <span class="sw-stat-label">Retail SKUs</span>
+                    </div>
+                @endif
             </div>
+
+            @if ($retailFamilies->isNotEmpty())
+                <nav class="sw-style-retail-nav" aria-label="Retail families for this style">
+                    <span class="sw-style-retail-nav-label">Retail families</span>
+                    <div class="sw-style-retail-nav-pills">
+                        @foreach ($retailFamilies as $retailFamily)
+                            @php
+                                $scopeLabel = \App\Support\RetailStyleFamilyCatalogue::scopeLabel($retailFamily->catalogue_scope_key);
+                            @endphp
+                            <a href="{{ route('retail-products.families.show', $retailFamily) }}"
+                               class="sw-style-retail-pill {{ (int) ($retailFamily->products_count ?? 0) === 0 ? 'is-empty' : '' }}"
+                               title="{{ $scopeLabel }} — {{ $retailFamily->products_count }} sellable SKU{{ $retailFamily->products_count === 1 ? '' : 's' }}">
+                                {{ $scopeLabel }}
+                                <em>{{ $retailFamily->products_count }}</em>
+                            </a>
+                        @endforeach
+                    </div>
+                </nav>
+            @endif
 
             {{-- Edit Drawer --}}
             <details id="style-edit-drawer" class="sw-drawer">
@@ -266,9 +291,6 @@
             @php
                 $directSkuImageCount = $style->skus->sum(fn ($sku) => $sku->images->count());
                 $missingSkuImages = $style->skus->filter(fn ($sku) => $sku->images->isEmpty())->count();
-                $retailFamilies = $retailFamilies ?? collect();
-                $retailSkuTotal = (int) $retailFamilies->sum('products_count');
-                $retailFamilyCount = $retailFamilies->count();
             @endphp
 
             <details class="sw-publish-dock {{ $retailSkuTotal > 0 ? 'is-published' : 'is-draft' }}" data-sw-fragment="publish">
@@ -327,27 +349,10 @@
                         </div>
                     </div>
 
-                    @if ($retailFamilies->isNotEmpty())
-                        <div class="sw-retail-families">
-                            <h4 class="sw-retail-families-title">Retail families for this style</h4>
-                            <p class="sw-retail-families-intro">
-                                Splitting a SKU group with <strong>+</strong> creates another family here. Open the one you need.
-                            </p>
-                            <ul class="sw-retail-families-list">
-                                @foreach ($retailFamilies as $retailFamily)
-                                    @php
-                                        $scopeLabel = \App\Support\RetailStyleFamilyCatalogue::scopeLabel($retailFamily->catalogue_scope_key);
-                                        $isCurrentPrimary = (int) ($publishedFamily?->id ?? 0) === (int) $retailFamily->id;
-                                    @endphp
-                                    <li class="sw-retail-families-item {{ $isCurrentPrimary ? 'is-primary' : '' }}">
-                                        <a href="{{ route('retail-products.families.show', $retailFamily) }}" class="sw-retail-families-link">
-                                            <strong>{{ $scopeLabel }}</strong>
-                                            <span>{{ number_format($retailFamily->products_count) }} SKU{{ $retailFamily->products_count === 1 ? '' : 's' }}</span>
-                                        </a>
-                                    </li>
-                                @endforeach
-                            </ul>
-                        </div>
+                    @if ($retailFamilyCount > 1)
+                        <p class="sw-publish-split-hint">
+                            {{ $retailFamilyCount }} retail families for this style — use the <strong>Retail families</strong> pills in the sidebar.
+                        </p>
                     @endif
 
                     <div class="sw-publish-setup">
@@ -779,7 +784,7 @@
                                     View retail ({{ $publishedFamily->products_count }})
                                 </a>
                             @elseif ($retailFamilyCount > 1)
-                                <span class="sw-sku-retail-hint">Use <strong>Retail families</strong> above to open each split family.</span>
+                                <span class="sw-sku-retail-hint">Open a length bucket from <strong>Retail families</strong> in the sidebar.</span>
                             @endif
                             <form method="POST" action="{{ route('brand-catalogue.styles.publish-products', $style) }}" class="sw-sku-publish-form">
                                 @csrf
