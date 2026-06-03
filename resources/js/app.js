@@ -4643,7 +4643,10 @@ const initRetailFamilyManager = () => {
                 });
                 const data = await response.json().catch(() => ({}));
                 if (!response.ok) {
-                    throw new Error(data.message || 'Unable to create a new family for this group.');
+                    const fallback = response.status === 422
+                        ? 'This group cannot be split (validation).'
+                        : `Server error (${response.status}). Upload latest PHP files and run migrate on cPanel.`;
+                    throw new Error(data.message || fallback);
                 }
 
                 if (data.redirect_url) {

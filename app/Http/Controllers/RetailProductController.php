@@ -28,6 +28,7 @@ use App\Support\RetailFamilySkuGrouper;
 use App\Support\VariantNaturalSort;
 use Illuminate\Contracts\View\View;
 use Illuminate\Database\Query\Builder;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -1575,9 +1576,44 @@ class RetailProductController extends Controller
     ): JsonResponse|RedirectResponse {
         $bucketLabel = $option->label;
 
-        $newFamily = DB::transaction(function () use ($family, $option): ProductFamily {
-            return $this->executeSplitFamilyBucketToNewFamily($family, (int) $option->id);
-        });
+        try {
+            $newFamily = DB::transaction(function () use ($family, $option): ProductFamily {
+                return $this->executeSplitFamilyBucketToNewFamily($family, (int) $option->id);
+            });
+        } catch (ValidationException $exception) {
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'message' => collect($exception->errors())->flatten()->first()
+                        ?? 'Unable to create a new family for this group.',
+                ], 422);
+            }
+
+            throw $exception;
+        } catch (QueryException $exception) {
+            report($exception);
+
+            $message = $this->splitFamilyFailureMessage($exception);
+
+            if ($request->expectsJson()) {
+                return response()->json(['message' => $message], 500);
+            }
+
+            return redirect()
+                ->to(route('retail-products.families.show', $family).'#rfm-skus-workspace')
+                ->withErrors(['split_family' => $message]);
+        } catch (\Throwable $exception) {
+            report($exception);
+
+            $message = 'Unable to create a new family for this group. Check storage/logs/laravel.log on the server.';
+
+            if ($request->expectsJson()) {
+                return response()->json(['message' => $message], 500);
+            }
+
+            return redirect()
+                ->to(route('retail-products.families.show', $family).'#rfm-skus-workspace')
+                ->withErrors(['split_family' => $message]);
+        }
 
         $movedCount = $newFamily->products()->count();
         $message = "Created a new family for {$bucketLabel} and moved {$movedCount} sellable SKU"
@@ -2057,7 +2093,8 @@ class RetailProductController extends Controller
 
             $newGroup = ProductVariantGroup::query()->create([
                 'product_family_id' => $targetFamily->id,
-                'brand_catalogue_variant_id' => $group->brand_catalogue_variant_id,
+                // Catalogue variant ids are globally unique — never copy to a second family.
+                'brand_catalogue_variant_id' => null,
                 'name' => $group->name,
                 'variant_type' => $group->variant_type,
                 'sort_order' => $group->sort_order,
@@ -2067,7 +2104,7 @@ class RetailProductController extends Controller
             foreach ($group->options as $option) {
                 $newOption = ProductVariantOption::query()->create([
                     'product_variant_group_id' => $newGroup->id,
-                    'brand_catalogue_variant_option_id' => $option->brand_catalogue_variant_option_id,
+                    'brand_catalogue_variant_option_id' => null,
                     'label' => $option->label,
                     'value' => $option->value,
                     'sort_order' => $option->sort_order,
@@ -2236,6 +2273,62 @@ class RetailProductController extends Controller
         return Str::limit('split-'.($base !== '' ? $base : 'bucket-'.$option->id), 120, '');
     }
 
+    /**
+     * @param  array<string, mixed>  $targetAttributes
+     */
+    private function createSplitTargetFamily(
+        array $targetAttributes,
+        ProductFamily $sourceFamily,
+        string $scopeKey,
+        bool $hasScopeKeyColumn,
+    ): ProductFamily {
+        try {
+            return ProductFamily::query()->create($targetAttributes);
+        } catch (QueryException $exception) {
+            if (! $this->isDuplicateCatalogueStyleFamilyConstraint($exception)) {
+                throw $exception;
+            }
+
+            $targetAttributes['brand_catalogue_style_id'] = null;
+            if ($hasScopeKeyColumn) {
+                unset($targetAttributes['catalogue_scope_key']);
+            }
+
+            return ProductFamily::query()->create($targetAttributes);
+        }
+    }
+
+    private function isDuplicateCatalogueStyleFamilyConstraint(QueryException $exception): bool
+    {
+        $errorInfo = $exception->errorInfo ?? [];
+        $sqlState = (string) ($errorInfo[0] ?? '');
+        $message = strtolower($exception->getMessage());
+
+        if ($sqlState !== '23000' && ! str_contains($message, 'duplicate')) {
+            return false;
+        }
+
+        return str_contains($message, 'brand_catalogue_style_id')
+            || str_contains($message, 'product_families_style_scope_unique')
+            || str_contains($message, 'product_families_brand_catalogue_style_id_unique');
+    }
+
+    private function splitFamilyFailureMessage(QueryException $exception): string
+    {
+        if ($this->isDuplicateCatalogueStyleFamilyConstraint($exception)) {
+            return 'This family is still linked to a catalogue style in a way that only allows one retail family per style. '
+                .'Run database migrations on the server (php artisan migrate --force), then try again.';
+        }
+
+        if (str_contains(strtolower($exception->getMessage()), 'brand_catalogue_variant')) {
+            return 'Variant catalogue links could not be duplicated for the new family. '
+                .'Upload the latest app/Http/Controllers/RetailProductController.php and try again.';
+        }
+
+        return 'Database error while creating the new family. '
+            .'Run php artisan migrate --force on the server if migrations are behind, then check storage/logs/laravel.log.';
+    }
+
     private function executeSplitFamilyBucketToNewFamily(ProductFamily $family, int $optionId): ProductFamily
     {
         $family->loadMissing([
@@ -2308,9 +2401,12 @@ class RetailProductController extends Controller
 
         if ($hasScopeKeyColumn && $family->brand_catalogue_style_id) {
             $targetAttributes['catalogue_scope_key'] = $scopeKey;
+        } elseif ($family->brand_catalogue_style_id) {
+            // Legacy DB: brand_catalogue_style_id is unique per family — do not reuse on split.
+            $targetAttributes['brand_catalogue_style_id'] = null;
         }
 
-        $targetFamily = ProductFamily::query()->create($targetAttributes);
+        $targetFamily = $this->createSplitTargetFamily($targetAttributes, $family, $scopeKey, $hasScopeKeyColumn);
 
         $maps = $this->replicateFamilyVariantStructure($family, $targetFamily, (int) $splitGroup->id);
         $this->replicateFamilyLevelRecords($family, $targetFamily);
