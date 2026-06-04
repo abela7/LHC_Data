@@ -532,12 +532,52 @@
                 border-color: #e5dbc9;
                 box-shadow: 0 4px 20px rgba(31,36,33,.03);
             }
-            .his-recent-section .his-brand-head h2 {
+            .his-recent-accordion {
+                display:flex;
+                flex-direction:column;
+                gap:0;
+            }
+            .his-recent-accordion > summary {
+                list-style:none;
+                cursor:pointer;
+                border-bottom:1px solid transparent;
+            }
+            .his-recent-accordion > summary::-webkit-details-marker { display:none; }
+            .his-recent-accordion > summary::marker { content:''; }
+            .his-recent-accordion > summary:hover { background:rgba(237,248,243,.35); }
+            .his-recent-accordion[open] > summary {
+                border-bottom-color:#eee4d6;
+                padding-bottom:.85rem;
+            }
+            .his-recent-accordion-summary {
+                display:flex;
+                align-items:flex-start;
+                justify-content:space-between;
+                gap:1rem;
+            }
+            .his-recent-accordion-summary::after {
+                content:'';
+                flex-shrink:0;
+                width:20px;
+                height:20px;
+                margin-top:.35rem;
+                background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%235f5749' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+                background-size:contain;
+                background-repeat:no-repeat;
+                transition:transform .2s ease;
+            }
+            .his-recent-accordion[open] > summary::after { transform:rotate(180deg); }
+            .his-recent-accordion-body {
+                padding-top:.9rem;
+            }
+            .his-recent-section .his-brand-head h2,
+            .his-recent-accordion-summary h2 {
                 display:flex;
                 align-items:center;
                 gap:.5rem;
             }
-            .his-recent-section .his-brand-head h2::before {
+            .his-recent-section .his-brand-head h2::before,
+            .his-recent-accordion-summary h2::before {
                 content: '';
                 display: inline-block;
                 width: 20px;
@@ -694,11 +734,12 @@
             </div>
         </form>
 
-        <section class="his-brand his-recent-section">
-            <header class="his-brand-head">
+        <details class="his-brand his-recent-section his-recent-accordion">
+            <summary class="his-brand-head his-recent-accordion-summary">
                 <h2>Recent drafts &amp; submissions</h2>
                 <span>{{ $recentIntakes->count() }} recent</span>
-            </header>
+            </summary>
+            <div class="his-recent-accordion-body">
             <div class="his-recent-grid">
                 @forelse ($recentIntakes as $intake)
                     @php
@@ -791,7 +832,8 @@
                     <div class="his-empty">No recent intake records yet.</div>
                 @endforelse
             </div>
-        </section>
+            </div>
+        </details>
 
         @forelse ($groupedByBrand as $brandName => $intakes)
             <section class="his-brand">
