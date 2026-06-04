@@ -12191,23 +12191,6 @@
         @apply inline-flex shrink-0 items-center gap-1;
     }
 
-    .rfm-sku-group-new-family {
-        @apply inline-flex h-6 w-6 items-center justify-center rounded-full border text-base font-black leading-none;
-        border-color: rgba(42, 92, 138, 0.22);
-        background: #f5f9ff;
-        color: #2a5c8a;
-    }
-
-    .rfm-sku-group-new-family:hover,
-    .rfm-sku-group-new-family:focus-visible {
-        border-color: #2a5c8a;
-        outline: none;
-    }
-
-    .rfm-sku-group-new-family:disabled {
-        @apply cursor-not-allowed opacity-50;
-    }
-
     .rfm-sku-group-delete {
         @apply inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-base font-black leading-none;
         border-color: rgba(138, 42, 34, 0.22);

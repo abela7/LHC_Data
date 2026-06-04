@@ -1081,17 +1081,6 @@
                                     @if (! empty($skuGroup['option_id']))
                                         <span class="rfm-sku-group-actions">
                                             <button type="button"
-                                                    class="rfm-sku-group-new-family"
-                                                    data-rfm-sku-bucket-split-family
-                                                    data-rfm-action="{{ route('retail-products.families.variant-options.split-family', [$family, $skuGroup['option_id']]) }}"
-                                                    data-rfm-bucket-axis="{{ $groupingGroup->name }}"
-                                                    data-rfm-bucket-label="{{ $skuGroup['label'] }}"
-                                                    data-rfm-sku-count="{{ $skuGroup['products']->count() }}"
-                                                    aria-label="New family for {{ $groupingGroup->name }}: {{ $skuGroup['label'] }} ({{ $skuGroup['products']->count() }} SKUs)"
-                                                    title="New family">
-                                                <span aria-hidden="true">+</span>
-                                            </button>
-                                            <button type="button"
                                                     class="rfm-sku-group-delete"
                                                     data-rfm-sku-bucket-delete
                                                     data-rfm-action="{{ route('retail-products.families.variant-options.skus.destroy', [$family, $skuGroup['option_id']]) }}"
