@@ -7356,7 +7356,11 @@ const initVariantModelChips = (root, csrf, showToast) => {
         chip.classList.add('is-saving');
 
         try {
-            await destroyVariantOptionById(optionId, label);
+            const removed = await destroyVariantOptionById(optionId, label);
+            if (!removed) {
+                chip.classList.remove('is-saving');
+                btn.disabled = false;
+            }
         } catch (err) {
             chip.classList.remove('is-saving');
             btn.disabled = false;

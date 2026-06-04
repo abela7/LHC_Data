@@ -601,6 +601,7 @@ class RetailProductController extends Controller
                 $createdCount === 1 => "Created 1 sellable SKU ({$createdProducts[0]['name']}).",
                 $createdCount > 1 => "Created {$createdCount} sellable SKUs for {$newOptionLabels}.",
                 $createdCount === 0 && $skippedConflict > 0 => 'No sellables created — catalogue SKU already linked elsewhere.',
+                $createdCount === 0 && $skippedByChoice > 0 => 'No sellables created — you turned off every SKU in review.',
                 default => 'No sellable products were created. Add one complete sellable with main and common variants set, then try again.',
             };
 
