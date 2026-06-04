@@ -16,6 +16,56 @@ use Illuminate\Support\Collection;
 final class RetailFamilySellableCombinations
 {
     /**
+     * Stable signature: one slot per variant group on the family (groupId:optionId).
+     */
+    public static function variantSignature(ProductFamily $family, Collection $options): string
+    {
+        $byGroup = $options->keyBy(
+            fn (ProductVariantOption $option): int => (int) $option->product_variant_group_id,
+        );
+
+        return $family->variantGroups
+            ->sortBy('sort_order')
+            ->map(function ($group) use ($byGroup): string {
+                $groupId = (int) $group->id;
+                $optionId = (int) ($byGroup->get($groupId)?->id ?? 0);
+
+                return "{$groupId}:{$optionId}";
+            })
+            ->implode('|');
+    }
+
+    public static function variantSignatureFromProduct(ProductFamily $family, Product $product): string
+    {
+        $byGroup = [];
+
+        foreach ($product->variantValues as $value) {
+            $byGroup[(int) $value->product_variant_group_id] = (int) $value->product_variant_option_id;
+        }
+
+        return $family->variantGroups
+            ->sortBy('sort_order')
+            ->map(function ($group) use ($byGroup): string {
+                $groupId = (int) $group->id;
+
+                return "{$groupId}:".($byGroup[$groupId] ?? 0);
+            })
+            ->implode('|');
+    }
+
+    /**
+     * @param  list<ProductVariantOption>  $combo
+     */
+    public static function findProductForCombo(ProductFamily $family, array $combo): ?Product
+    {
+        $target = self::variantSignature($family, collect($combo));
+
+        return $family->products->first(
+            fn (Product $product): bool => self::variantSignatureFromProduct($family, $product) === $target,
+        );
+    }
+
+    /**
      * @param  Collection<int, int>  $newOptionIds
      * @return list<list<ProductVariantOption>>
      */
@@ -70,11 +120,7 @@ final class RetailFamilySellableCombinations
                     continue;
                 }
 
-                $signature = collect($combo)
-                    ->map(fn (ProductVariantOption $option): int => (int) $option->id)
-                    ->sort()
-                    ->values()
-                    ->implode(',');
+                $signature = self::variantSignature($family, collect($combo));
 
                 if (isset($seen[$signature])) {
                     continue;

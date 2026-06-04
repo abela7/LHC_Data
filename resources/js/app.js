@@ -5835,19 +5835,143 @@ const initVariantModelChips = (root, csrf, showToast) => {
         }
     };
 
-    const markChipReady = (optionId) => {
-        const chip = root.querySelector(`[data-rfm-vchip][data-option-id="${optionId}"]`);
-        if (!chip) return;
-        chip.classList.remove('needs-sku');
-        chip.classList.add('is-ready');
-        chip.dataset.rfmMissing = '0';
-        chip.removeAttribute('data-rfm-new-option');
-        const pending = chip.querySelector('.rfm-vchip-pending');
-        if (pending) {
-            pending.className = 'rfm-vchip-ready';
-            pending.title = 'Sellable SKU exists for this value';
-            pending.textContent = 'Ready';
+    const syncChipSellableState = (sellableMap) => {
+        if (!sellableMap || typeof sellableMap !== 'object') {
+            return;
         }
+
+        Object.entries(sellableMap).forEach(([id, stats]) => {
+            const chip = root.querySelector(`[data-rfm-vchip][data-option-id="${id}"]`);
+            if (!chip) return;
+
+            const missing = Number(stats?.missing) || 0;
+            chip.dataset.rfmMissing = String(missing);
+            chip.classList.toggle('needs-sku', missing > 0);
+            chip.classList.toggle('is-ready', missing === 0);
+
+            if (missing === 0) {
+                chip.removeAttribute('data-rfm-new-option');
+            }
+
+            let status = chip.querySelector('.rfm-vchip-pending, .rfm-vchip-ready');
+            if (!status) {
+                status = document.createElement('span');
+                chip.querySelector('.rfm-vchip-label')?.after(status);
+            }
+
+            if (missing > 0) {
+                status.className = 'rfm-vchip-pending';
+                status.title = 'Click to create sellable SKUs for this value';
+                status.textContent = 'Pending';
+            } else {
+                status.className = 'rfm-vchip-ready';
+                status.title = 'Sellable SKU exists for this value';
+                status.textContent = 'Ready';
+            }
+        });
+    };
+
+    const clearExistingSkusNotice = () => {
+        root.querySelector('[data-rfm-existing-skus-panel]')?.remove();
+        root.querySelectorAll('[data-rfm-sku].rfm-sku-is-highlighted').forEach((row) => {
+            row.classList.remove('rfm-sku-is-highlighted');
+        });
+    };
+
+    const renderExistingSkusNotice = (examples, optionIds) => {
+        clearExistingSkusNotice();
+        if (!examples?.length) return;
+
+        const anchor = root.querySelector('[data-rfm-variant-create-bar]')
+            || root.querySelector('[data-rfm-variant-chip-field]');
+        if (!anchor) return;
+
+        const panel = document.createElement('div');
+        panel.className = 'rfm-existing-skus-panel';
+        panel.dataset.rfmExistingSkusPanel = '';
+
+        const title = document.createElement('p');
+        title.className = 'rfm-existing-skus-panel-title';
+        title.textContent = 'These sellable SKUs already use that variant value (names may not mention the colour):';
+        panel.append(title);
+
+        const list = document.createElement('ul');
+        list.className = 'rfm-existing-skus-panel-list';
+
+        examples.forEach((row) => {
+            const item = document.createElement('li');
+            if (row.url) {
+                const link = document.createElement('a');
+                link.href = row.url;
+                link.textContent = row.name || 'Sellable SKU';
+                item.append(link);
+            } else {
+                item.textContent = row.name || 'Sellable SKU';
+            }
+
+            if (row.variants) {
+                const meta = document.createElement('span');
+                meta.className = 'rfm-existing-skus-panel-variants';
+                meta.textContent = row.variants;
+                item.append(meta);
+            }
+
+            if (row.sku) {
+                const sku = document.createElement('span');
+                sku.className = 'rfm-existing-skus-panel-sku';
+                sku.textContent = row.sku;
+                item.append(sku);
+            }
+
+            list.append(item);
+        });
+
+        panel.append(list);
+
+        const jump = document.createElement('button');
+        jump.type = 'button';
+        jump.className = 'rfm-existing-skus-panel-jump';
+        jump.textContent = 'Show in SKU list below';
+        jump.addEventListener('click', () => focusSkuListForOptions(optionIds));
+        panel.append(jump);
+
+        anchor.insertAdjacentElement('afterend', panel);
+        focusSkuListForOptions(optionIds);
+    };
+
+    const focusSkuListForOptions = (optionIds) => {
+        const idSet = new Set(optionIds.map((id) => String(id)));
+        if (!idSet.size) return;
+
+        const workspace = document.getElementById('rfm-skus-workspace');
+        workspace?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+        root.querySelectorAll('[data-rfm-sku-group]').forEach((group) => {
+            const groupOptionId = group.dataset.rfmSkuGroupOptionId;
+            if (groupOptionId && idSet.has(String(groupOptionId))) {
+                group.open = true;
+            }
+        });
+
+        const searchLabel = [...idSet]
+            .map((id) => root.querySelector(`[data-rfm-vchip][data-option-id="${id}"]`)?.dataset.chipLabel)
+            .find(Boolean);
+
+        const searchInput = root.querySelector('[data-rfm-search]');
+        if (searchInput && searchLabel) {
+            searchInput.value = searchLabel;
+            searchInput.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+
+        root.querySelectorAll('[data-rfm-sku]').forEach((row) => {
+            const ids = (row.dataset.rfmVariantOptions || '').split(/\s+/).filter(Boolean);
+            const hit = ids.some((id) => idSet.has(id));
+            row.classList.toggle('rfm-sku-is-highlighted', hit);
+            if (hit) {
+                row.closest('details')?.setAttribute('open', '');
+                row.closest('.rfm-sku-group')?.setAttribute('open', '');
+            }
+        });
     };
 
     const refreshFamilySkuList = async () => {
@@ -6062,32 +6186,25 @@ const initVariantModelChips = (root, csrf, showToast) => {
                 throw new Error(data.message || 'Could not create sellable products.');
             }
 
-            optionIds.forEach((id) => markChipReady(id));
-
-            if (data.variant_option_sellable) {
-                Object.entries(data.variant_option_sellable).forEach(([id, stats]) => {
-                    const chip = root.querySelector(`[data-rfm-vchip][data-option-id="${id}"]`);
-                    if (chip && stats.missing > 0) {
-                        chip.dataset.rfmMissing = String(stats.missing);
-                        chip.classList.add('needs-sku');
-                        chip.classList.remove('is-ready');
-                        const pending = chip.querySelector('.rfm-vchip-pending, .rfm-vchip-ready');
-                        if (pending) {
-                            pending.className = 'rfm-vchip-pending';
-                            pending.textContent = 'Pending';
-                        }
-                    }
-                });
-            }
-
+            syncChipSellableState(data.variant_option_sellable);
             updateCreateBar();
             await refreshFamilySkuList();
 
-            showToast(data.message || 'Sellable products created.');
+            const createdCount = Number(data.created_count) || 0;
+            const skippedExisting = Number(data.skipped_existing) || 0;
+            const isDuplicateOnly = createdCount === 0 && skippedExisting > 0;
 
-            const skusWorkspace = document.getElementById('rfm-skus-workspace');
-            if (skusWorkspace) {
-                skusWorkspace.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            if (isDuplicateOnly && data.existing_examples?.length) {
+                renderExistingSkusNotice(data.existing_examples, optionIds);
+                showToast(data.message || 'Sellable products already exist for this value.', true);
+            } else {
+                clearExistingSkusNotice();
+                showToast(data.message || 'Sellable products created.');
+
+                if (createdCount > 0) {
+                    const skusWorkspace = document.getElementById('rfm-skus-workspace');
+                    skusWorkspace?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
             }
         } catch (err) {
             showToast(err.message || 'Could not create sellable products.', true);

@@ -441,7 +441,7 @@ class RetailProductController extends Controller
         $firstName = null;
 
         foreach ($combinations as $combo) {
-            $signature = collect($combo)->map(fn (ProductVariantOption $o): int => (int) $o->id)->sort()->values()->implode(',');
+            $signature = RetailFamilySellableCombinations::variantSignature($family, collect($combo));
             if (isset($existingSignatures[$signature])) {
                 $skippedExisting++;
 
@@ -543,16 +543,17 @@ class RetailProductController extends Controller
             $createdProducts = [];
             $skippedExisting = 0;
             $skippedConflict = 0;
+            $existingExamples = [];
 
             foreach (RetailFamilySellableCombinations::forNewVariantOptions($family, $validOptionIds) as $combo) {
-                $signature = collect($combo)
-                    ->map(fn (ProductVariantOption $option): int => (int) $option->id)
-                    ->sort()
-                    ->values()
-                    ->implode(',');
+                $signature = RetailFamilySellableCombinations::variantSignature($family, collect($combo));
 
                 if (isset($existingSignatures[$signature])) {
                     $skippedExisting++;
+                    $match = RetailFamilySellableCombinations::findProductForCombo($family, $combo);
+                    if ($match && count($existingExamples) < 6) {
+                        $existingExamples[] = $this->sellableProductSummary($match);
+                    }
 
                     continue;
                 }
@@ -561,31 +562,52 @@ class RetailProductController extends Controller
 
                 if ($product === null) {
                     $skippedConflict++;
+                    if (count($existingExamples) < 6) {
+                        $labels = collect($combo)->pluck('label')->implode(', ');
+                        $existingExamples[] = [
+                            'name' => "Blocked (catalogue link): {$labels}",
+                            'sku' => null,
+                            'url' => null,
+                            'variants' => $labels,
+                        ];
+                    }
 
                     continue;
                 }
 
                 $existingSignatures[$signature] = true;
-                $createdProducts[] = [
-                    'id' => $product->id,
-                    'name' => $product->name,
-                    'sku' => $product->sku,
-                    'url' => route('retail-products.products.show', $product),
-                ];
+                $createdProducts[] = $this->sellableProductSummary($product);
+            }
+
+            if ($existingExamples === [] && $skippedExisting > 0) {
+                $existingExamples = $this->existingProductsForVariantOptions($family, $validOptionIds)
+                    ->take(6)
+                    ->map(fn (Product $product): array => $this->sellableProductSummary($product))
+                    ->values()
+                    ->all();
             }
 
             $createdCount = count($createdProducts);
+            $newOptionLabels = ProductVariantOption::query()
+                ->whereIn('id', $validOptionIds->all())
+                ->pluck('label')
+                ->implode(', ');
+
+            $exampleCount = count($existingExamples);
             $message = match (true) {
-                $createdCount === 0 && $skippedExisting > 0 => 'Those sellable products already exist.',
+                $createdCount === 0 && $skippedExisting > 0 => $exampleCount > 0
+                    ? "Sellable products for {$newOptionLabels} already exist ({$exampleCount} example".($exampleCount === 1 ? '' : 's')." listed below — check Colour in the variant breakdown, not only the product name)."
+                    : "Sellable products for {$newOptionLabels} already exist on this family — expand each group in the SKU list or search for the colour label.",
                 $createdCount === 1 => "Created 1 sellable SKU ({$createdProducts[0]['name']}).",
-                $createdCount > 1 => "Created {$createdCount} sellable SKUs.",
-                default => 'No sellable products were created. Check that existing SKUs cover the main axes (e.g. length) for templates.',
+                $createdCount > 1 => "Created {$createdCount} sellable SKUs for {$newOptionLabels}.",
+                $createdCount === 0 && $skippedConflict > 0 => 'No sellables created — catalogue SKU already linked elsewhere.',
+                default => 'No sellable products were created. Add a complete sellable (length + pack + colour) first, then try again.',
             };
 
             if ($skippedExisting > 0 && $createdCount > 0) {
                 $message .= " {$skippedExisting} combination".($skippedExisting === 1 ? '' : 's').' already existed.';
             }
-            if ($skippedConflict > 0) {
+            if ($skippedConflict > 0 && $createdCount > 0) {
                 $message .= " {$skippedConflict} skipped (catalogue conflict).";
             }
 
@@ -595,6 +617,7 @@ class RetailProductController extends Controller
                 'skipped_existing' => $skippedExisting,
                 'skipped_conflict' => $skippedConflict,
                 'products' => $createdProducts,
+                'existing_examples' => $existingExamples,
                 'variant_option_sellable' => $this->variantOptionSellableMap($family),
             ]);
         } catch (ValidationException $exception) {
@@ -643,7 +666,7 @@ class RetailProductController extends Controller
         $firstName = null;
 
         foreach ($combinations as $combo) {
-            $signature = collect($combo)->map(fn (ProductVariantOption $o): int => (int) $o->id)->sort()->values()->implode(',');
+            $signature = RetailFamilySellableCombinations::variantSignature($family, collect($combo));
             if (isset($existingSignatures[$signature])) {
                 $skippedExisting++;
 
@@ -888,16 +911,53 @@ class RetailProductController extends Controller
     {
         $signatures = [];
         foreach ($family->products as $product) {
-            $signature = $product->variantValues
-                ->pluck('product_variant_option_id')
-                ->map(fn (mixed $id): int => (int) $id)
-                ->sort()
-                ->values()
-                ->implode(',');
+            $signature = RetailFamilySellableCombinations::variantSignatureFromProduct($family, $product);
             $signatures[$signature] = true;
         }
 
         return $signatures;
+    }
+
+    /**
+     * @return array{id: int, name: string, sku: ?string, url: string, variants: string}
+     */
+    private function sellableProductSummary(Product $product): array
+    {
+        $product->loadMissing(['variantValues.option', 'variantValues.group']);
+
+        $variants = $product->variantValues
+            ->sortBy(fn ($value) => sprintf(
+                '%04d:%04d',
+                (int) ($value->group?->sort_order ?? 9999),
+                (int) ($value->option?->sort_order ?? 9999),
+            ))
+            ->map(fn ($value): string => ($value->group?->name ?? 'Variant').': '.($value->option?->label ?? '—'))
+            ->implode(' · ');
+
+        return [
+            'id' => (int) $product->id,
+            'name' => $product->name,
+            'sku' => $product->sku,
+            'url' => route('retail-products.products.show', $product),
+            'variants' => $variants,
+        ];
+    }
+
+    /**
+     * @param  Collection<int, int>  $optionIds
+     * @return Collection<int, Product>
+     */
+    private function existingProductsForVariantOptions(ProductFamily $family, Collection $optionIds): Collection
+    {
+        $optionIdSet = $optionIds->flip();
+
+        return $family->products->filter(
+            function (Product $product) use ($optionIdSet): bool {
+                return $product->variantValues->contains(
+                    fn ($value): bool => $optionIdSet->has((int) $value->product_variant_option_id),
+                );
+            },
+        );
     }
 
     /**
@@ -919,11 +979,7 @@ class RetailProductController extends Controller
         $missing = 0;
 
         foreach ($this->cartesianFamilyVariantCombinations($family) as $combo) {
-            $signature = collect($combo)
-                ->map(fn (ProductVariantOption $option): int => (int) $option->id)
-                ->sort()
-                ->values()
-                ->implode(',');
+            $signature = RetailFamilySellableCombinations::variantSignature($family, collect($combo));
 
             if (! isset($existingSignatures[$signature])) {
                 $missing++;
@@ -954,11 +1010,7 @@ class RetailProductController extends Controller
 
                 foreach (RetailFamilySellableCombinations::forNewVariantOptions($family, collect([(int) $option->id])) as $combo) {
                     $comboTotal++;
-                    $signature = collect($combo)
-                        ->map(fn (ProductVariantOption $o): int => (int) $o->id)
-                        ->sort()
-                        ->values()
-                        ->implode(',');
+                    $signature = RetailFamilySellableCombinations::variantSignature($family, collect($combo));
 
                     if (! isset($existingSignatures[$signature])) {
                         $missing++;

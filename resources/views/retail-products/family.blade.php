@@ -1032,7 +1032,11 @@
             <div class="rfm-sku-groups" data-rfm-sku-groups>
                 @foreach ($skuGroups as $skuGroup)
                     @if ($useSkuAccordions)
-                        <details class="rfm-sku-group" data-rfm-sku-group>
+                        <details class="rfm-sku-group"
+                                 data-rfm-sku-group
+                                 @if (! empty($skuGroup['option_id']))
+                                     data-rfm-sku-group-option-id="{{ $skuGroup['option_id'] }}"
+                                 @endif>
                             <summary class="rfm-sku-group-summary">
                                 <div class="rfm-sku-group-leading">
                                     <span class="rfm-sku-group-axis">{{ $groupingGroup->name }}</span>

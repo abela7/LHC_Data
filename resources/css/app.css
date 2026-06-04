@@ -11683,6 +11683,59 @@
         outline: none;
     }
 
+    .rfm-existing-skus-panel {
+        @apply mb-3 rounded-[12px] border p-3;
+        border-color: rgba(180, 120, 40, 0.45);
+        background: rgba(255, 248, 235, 0.95);
+    }
+
+    .rfm-existing-skus-panel-title {
+        @apply mb-2 text-xs font-semibold leading-snug;
+        color: #6b4e12;
+        margin-bottom: 0.5rem;
+    }
+
+    .rfm-existing-skus-panel-list {
+        @apply m-0 list-none space-y-2 p-0 text-sm;
+    }
+
+    .rfm-existing-skus-panel-list li {
+        @apply flex flex-col gap-0.5;
+    }
+
+    .rfm-existing-skus-panel-list a {
+        @apply font-semibold underline-offset-2 hover:underline;
+        color: var(--color-ink);
+    }
+
+    .rfm-existing-skus-panel-variants {
+        @apply text-xs;
+        color: #5c665f;
+    }
+
+    .rfm-existing-skus-panel-sku {
+        @apply text-xs font-mono;
+        color: #7a847c;
+    }
+
+    .rfm-existing-skus-panel-jump {
+        @apply mt-3 inline-flex min-h-9 items-center rounded-full border px-3 py-1 text-xs font-bold cursor-pointer;
+        border-color: rgba(180, 120, 40, 0.5);
+        background: #fff;
+        color: #6b4e12;
+    }
+
+    .rfm-existing-skus-panel-jump:hover,
+    .rfm-existing-skus-panel-jump:focus-visible {
+        background: rgba(255, 248, 235, 1);
+        outline: none;
+    }
+
+    .rfm-sku.rfm-sku-is-highlighted .rfm-sku-summary {
+        @apply ring-2 ring-offset-1;
+        --tw-ring-color: rgba(29, 111, 95, 0.55);
+    }
+
     .rfm-variant-create-bar-btn:disabled,
     .rfm-variant-create-bar-btn.is-busy {
         opacity: 0.6;
