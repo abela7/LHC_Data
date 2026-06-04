@@ -6418,11 +6418,38 @@ const initVariantModelChips = (root, csrf, showToast) => {
         }
     };
 
+    const createPendingChip = async (chip) => {
+        const optionId = Number(chip?.dataset.optionId);
+        if (optionId <= 0) return;
+
+        const field = chip.closest('[data-rfm-variant-chip-field]');
+        const role = field?.dataset.groupRole || '';
+
+        if (role === 'sub_main' && mainAxisOptions.length >= 2) {
+            const scopeMains = selectedScopeMains(field);
+            if (scopeMains !== null) {
+                if (!scopeMains.length) {
+                    showToast(`Tick at least one ${mainAxisName} above to add new ${field.dataset.groupName || 'values'}.`, true);
+                    return;
+                }
+
+                await runCreateSellableSkus([optionId], scopeMains, []);
+                return;
+            }
+        }
+
+        await runCreateSellableSkus([optionId]);
+    };
+
     if (createBtn && createNewSkusUrl) {
-        createBtn.addEventListener('click', () => {
-            const optionIds = pendingOptionIds();
-            if (!optionIds.length) return;
-            runCreateSellableSkus(optionIds);
+        createBtn.addEventListener('click', async () => {
+            const chips = pendingOptionIds()
+                .map((id) => root.querySelector(`[data-rfm-vchip][data-option-id="${id}"]`))
+                .filter(Boolean);
+
+            for (const chip of chips) {
+                await createPendingChip(chip);
+            }
         });
     }
 
@@ -6482,8 +6509,20 @@ const initVariantModelChips = (root, csrf, showToast) => {
                 || pendingChip.querySelector('.rfm-vchip-label')?.textContent?.trim()
                 || 'value';
 
-            // Sub-main value (e.g. Colour) + multiple mains -> ask "under which main(s)?"
+            // Sub-main value (e.g. Colour) + multiple mains -> use the persistent
+            // scope row first; otherwise ask "under which main(s)?".
             if (role === 'sub_main' && mainAxisOptions.length >= 2) {
+                const scopeMains = selectedScopeMains(field);
+                if (scopeMains !== null) {
+                    if (!scopeMains.length) {
+                        showToast(`Tick at least one ${mainAxisName} above to add ${chipLabel}.`, true);
+                        return;
+                    }
+
+                    await runCreateSellableSkus([optionId], scopeMains, []);
+                    return;
+                }
+
                 let covered = [];
                 try {
                     covered = JSON.parse(pendingChip.dataset.rfmCoveredMains || '[]').map(Number);

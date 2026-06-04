@@ -577,6 +577,38 @@ class RetailProductController extends Controller
                     ->all();
             }
 
+            $selectedOptions = $family->variantGroups
+                ->flatMap(fn (ProductVariantGroup $group) => $group->options)
+                ->whereIn('id', $validOptionIds->all())
+                ->values();
+
+            $hasNewSubOption = $selectedOptions->contains(
+                fn (ProductVariantOption $option): bool => $axes->isSubGroup((int) $option->product_variant_group_id),
+            );
+            $requiresMainScope = $hasNewSubOption
+                && $axes->mainGroup !== null
+                && $axes->mainGroup->options->count() > 1;
+
+            if ($requiresMainScope && $mainOptionIds === []) {
+                return response()->json([
+                    'message' => 'Choose which '.$axes->mainGroup->name.' value(s) this new sub-variant should go under before creating sellable SKUs.',
+                ], 422);
+            }
+
+            $hasNewMainOption = $axes->mainGroup !== null
+                && $selectedOptions->contains(
+                    fn (ProductVariantOption $option): bool => (int) $option->product_variant_group_id === (int) $axes->mainGroup->id,
+                );
+            $subOptionCount = $family->variantGroups
+                ->filter(fn (ProductVariantGroup $group): bool => $axes->isSubGroup((int) $group->id))
+                ->sum(fn (ProductVariantGroup $group): int => $group->options->count());
+
+            if ($hasNewMainOption && $subOptionCount > 1 && $subOptionIds === []) {
+                return response()->json([
+                    'message' => 'Choose which sub-variant value(s) should go under this new '.$axes->mainGroup->name.' before creating sellable SKUs.',
+                ], 422);
+            }
+
             $existingSignatures = $this->existingFamilyVariantSignatures($family);
             $defaultOpts = $this->defaultSellableProductOpts($family);
             $createdProducts = [];
