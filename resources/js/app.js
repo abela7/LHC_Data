@@ -3054,6 +3054,7 @@ const initRetailFamilyManager = () => {
         if (emptyState) emptyState.hidden = visible !== 0;
         updateFilterChrome(visible);
     };
+    root.__rfmApplyFilters = applyFilters;
 
     const setChipPressed = (chip, isPressed) => {
         chip.classList.toggle('is-active', isPressed);
@@ -6241,7 +6242,9 @@ const initVariantModelChips = (root, csrf, showToast) => {
         });
 
         syncVisibleSkuTotals();
-        applyFilters();
+        if (typeof root.__rfmApplyFilters === 'function') {
+            root.__rfmApplyFilters();
+        }
     };
 
     const ensureOptionInSelects = (groupId, option) => {
@@ -6709,7 +6712,30 @@ const initVariantModelChips = (root, csrf, showToast) => {
         showSkusForReadyChip(readyChip);
     });
 
+    const syncSubMainScopeFromMainChip = (chip) => {
+        const field = chip.closest('[data-rfm-variant-chip-field]');
+        if ((field?.dataset.groupRole || '') !== 'main') {
+            return;
+        }
+
+        const mainOptionId = String(chip.dataset.optionId || '');
+        if (!mainOptionId) {
+            return;
+        }
+
+        root.querySelectorAll('[data-rfm-variant-chip-field][data-group-role="sub_main"] [data-rfm-main-scope]')
+            .forEach((scope) => {
+                scope.querySelectorAll('[data-rfm-main-scope-opt]').forEach((input) => {
+                    input.checked = String(input.value) === mainOptionId;
+                });
+            });
+
+        const label = chip.dataset.chipLabel || chip.querySelector('.rfm-vchip-label')?.textContent?.trim() || mainAxisName;
+        showToast(`New ${subAxisName || 'sub-variant'} values will go under ${mainAxisName}: ${label}.`);
+    };
+
     const showSkusForReadyChip = (chip) => {
+        syncSubMainScopeFromMainChip(chip);
         const field = chip.closest('[data-rfm-variant-chip-field]');
         root.dispatchEvent(new CustomEvent('rfm-show-skus-for-variant-option', {
             bubbles: true,
