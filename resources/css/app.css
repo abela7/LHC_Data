@@ -10548,6 +10548,7 @@
     }
 
     .rfm-family-hub > .rfm-hub-panel.rfm-section,
+    .rfm-family-hub > .rfm-hub-panel.rfm-skus-panel,
     .rfm-family-hub .rfm-hub-stack > .rfm-hub-panel.rfm-family-shared {
         border: 0;
         border-radius: 0;
@@ -10590,6 +10591,7 @@
         @apply flex flex-wrap gap-2;
     }
 
+    .rfm-family-hub > .rfm-skus-panel,
     .rfm-family-hub .rfm-hub-stack > .rfm-skus-panel {
         margin-bottom: 0;
     }

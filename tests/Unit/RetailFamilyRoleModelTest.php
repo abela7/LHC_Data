@@ -130,6 +130,45 @@ final class RetailFamilyRoleModelTest extends TestCase
         $this->assertCount(2, $all);
     }
 
+    public function test_new_main_value_creates_only_chosen_subs(): void
+    {
+        $family = new ProductFamily(['id' => 1, 'family_name' => 'Poppin Twist']);
+        $length = new ProductVariantGroup(['id' => 1, 'name' => 'Length', 'variant_type' => 'measurement', 'sort_order' => 1, 'axis_role' => 'main']);
+        $colour = new ProductVariantGroup(['id' => 2, 'name' => 'Colour', 'variant_type' => 'colour_name', 'sort_order' => 2, 'axis_role' => 'sub_main']);
+        $bundle = new ProductVariantGroup(['id' => 3, 'name' => 'Bundle', 'variant_type' => 'count', 'sort_order' => 3, 'axis_role' => 'common']);
+
+        $len16 = new ProductVariantOption(['id' => 101, 'product_variant_group_id' => 1, 'label' => '16"']);
+        $len24 = new ProductVariantOption(['id' => 103, 'product_variant_group_id' => 1, 'label' => '24"']); // new main
+        $col4 = new ProductVariantOption(['id' => 201, 'product_variant_group_id' => 2, 'label' => '4']);
+        $col30 = new ProductVariantOption(['id' => 202, 'product_variant_group_id' => 2, 'label' => '30']);
+        $bundle3x = new ProductVariantOption(['id' => 301, 'product_variant_group_id' => 3, 'label' => '3x']);
+
+        $length->setRelation('options', collect([$len16, $len24]));
+        $colour->setRelation('options', collect([$col4, $col30]));
+        $bundle->setRelation('options', collect([$bundle3x]));
+        $family->setRelation('variantGroups', collect([$length, $colour, $bundle]));
+
+        // 16" already has both colours.
+        $family->setRelation('products', collect([
+            $this->makeProduct(1, [1 => $len16, 2 => $col4, 3 => $bundle3x]),
+            $this->makeProduct(2, [1 => $len16, 2 => $col30, 3 => $bundle3x]),
+        ]));
+
+        // New length 24" with only colour 4 chosen -> exactly one combo.
+        $chosen = RetailFamilySellableCombinations::forNewVariantOptions($family, collect([103]), [], [201]);
+        $this->assertCount(1, $chosen);
+        $byGroup = collect($chosen[0])->mapWithKeys(fn (ProductVariantOption $o): array => [
+            (int) $o->product_variant_group_id => $o->label,
+        ])->all();
+        $this->assertSame('24"', $byGroup[1]);
+        $this->assertSame('4', $byGroup[2]);
+        $this->assertSame('3x', $byGroup[3]);
+
+        // No sub filter -> mirrors the existing colours (4 and 30) under 24".
+        $all = RetailFamilySellableCombinations::forNewVariantOptions($family, collect([103]));
+        $this->assertCount(2, $all);
+    }
+
     /**
      * @return array{0: ProductFamily, 1: Collection<int, Product>}
      */

@@ -166,7 +166,10 @@
              data-rfm-variant-options-bulk-url="{{ route('retail-products.families.variant-options.bulk-store', $family) }}"
              data-rfm-variant-options-destroy-url-template="{{ route('retail-products.families.variant-options.destroy', [$family, 0]) }}"
              data-rfm-create-new-skus-url="{{ route('retail-products.families.variant-options.create-skus-for-new', $family) }}"
-             data-rfm-main-axis-options='@json($mainAxisPicker["options"] ?? [])'>
+             data-rfm-main-axis-name="{{ $mainAxisPicker['mainName'] ?? '' }}"
+             data-rfm-main-axis-options='@json($mainAxisPicker["mainOptions"] ?? [])'
+             data-rfm-sub-axis-name="{{ $mainAxisPicker['subName'] ?? '' }}"
+             data-rfm-sub-axis-options='@json($mainAxisPicker["subOptions"] ?? [])'>
         <nav class="rfm-crumbs" aria-label="Breadcrumb">
             <a href="{{ route('brand-catalogue.index') }}">Catalogue</a>
             <span aria-hidden="true">›</span>
@@ -355,6 +358,35 @@
 
         {{-- Family workspace: shared card, nested panels (design unchanged inside) --}}
         <section class="rfm-family-hub" aria-label="Family workspace">
+        @php
+            $skuToolsHint = collect([
+                $stats['missing_barcode'] > 0 ? $stats['missing_barcode'].' need barcode' : null,
+                $stats['missing_prices'] > 0 ? $stats['missing_prices'].' need price' : null,
+                $stats['missing_image'] > 0 ? $stats['missing_image'].' need image' : null,
+            ])->filter()->take(2)->implode(' · ');
+            if ($skuToolsHint === '') {
+                $skuToolsHint = 'Search by name, SKU or barcode';
+            }
+        @endphp
+        <details class="rfm-family-shared rfm-skus-panel rfm-hub-panel" open>
+            <summary>
+                <div>
+                    <span id="rfm-skus-heading">Sellable SKUs</span>
+                    <strong>{{ $stats['products'] }}</strong>
+                </div>
+                <em>{{ $skuToolsHint }}</em>
+            </summary>
+            <div class="rfm-skus-panel-body">
+                <label class="rfm-skus-search">
+                    <span class="rfm-skus-search-label">Search</span>
+                    <input type="search"
+                        placeholder="Name, SKU, barcode, shelf…"
+                        data-rfm-search
+                        autocomplete="off">
+                </label>
+            </div>
+        </details>
+
         <details class="rfm-section rfm-hub-panel" data-rfm-section="family-media">
             <summary>
                 <div>
@@ -730,37 +762,8 @@
             </details>
         </div>
 
-        {{-- SKU manager: search + filter + list --}}
-        @php
-            $skuToolsHint = collect([
-                $stats['missing_barcode'] > 0 ? $stats['missing_barcode'].' need barcode' : null,
-                $stats['missing_prices'] > 0 ? $stats['missing_prices'].' need price' : null,
-                $stats['missing_image'] > 0 ? $stats['missing_image'].' need image' : null,
-            ])->filter()->take(2)->implode(' · ');
-            if ($skuToolsHint === '') {
-                $skuToolsHint = 'Search by name, SKU or barcode';
-            }
-        @endphp
-        <div class="rfm-hub-stack rfm-skus" aria-labelledby="rfm-skus-heading">
-            <details class="rfm-family-shared rfm-skus-panel rfm-hub-panel">
-                <summary>
-                    <div>
-                        <span id="rfm-skus-heading">Sellable SKUs</span>
-                        <strong>{{ $stats['products'] }}</strong>
-                    </div>
-                    <em>{{ $skuToolsHint }}</em>
-                </summary>
-                <div class="rfm-skus-panel-body">
-                    <label class="rfm-skus-search">
-                        <span class="rfm-skus-search-label">Search</span>
-                        <input type="search"
-                            placeholder="Name, SKU, barcode, shelf…"
-                            data-rfm-search
-                            autocomplete="off">
-                    </label>
-                </div>
-            </details>
-
+        {{-- Family shared details (bulk price, channels, description) --}}
+        <div class="rfm-hub-stack rfm-skus" aria-label="Family SKU settings">
             <details class="rfm-family-shared rfm-hub-panel" data-rfm-shared-panel>
                 <summary>
                     <div>

@@ -502,6 +502,8 @@ class RetailProductController extends Controller
                 'option_ids.*' => ['integer'],
                 'main_option_ids' => ['nullable', 'array'],
                 'main_option_ids.*' => ['integer'],
+                'sub_option_ids' => ['nullable', 'array'],
+                'sub_option_ids.*' => ['integer'],
             ]);
 
             $family->load([
@@ -546,7 +548,9 @@ class RetailProductController extends Controller
                 ], 422);
             }
 
-            // Optional: restrict new sub SKUs to chosen main values (e.g. only Length 20").
+            // Role-aware placement filters:
+            //  - adding a SUB value (Colour) -> main_option_ids = which mains (Lengths) it goes under
+            //  - adding a MAIN value (Length) -> sub_option_ids = which subs (Colours) go under it
             $axes = RetailFamilyVariantAxes::forFamily($family, $family->products);
             $mainOptionIds = [];
             if (! empty($data['main_option_ids']) && $axes->mainGroup !== null) {
@@ -559,6 +563,20 @@ class RetailProductController extends Controller
                     ->all();
             }
 
+            $subOptionIds = [];
+            if (! empty($data['sub_option_ids'])) {
+                $allowedSubIds = $family->variantGroups
+                    ->filter(fn (ProductVariantGroup $group): bool => $axes->isSubGroup((int) $group->id))
+                    ->flatMap(fn (ProductVariantGroup $group) => $group->options->pluck('id'))
+                    ->map(fn ($id): int => (int) $id);
+                $subOptionIds = collect($data['sub_option_ids'])
+                    ->map(fn ($id): int => (int) $id)
+                    ->filter(fn (int $id): bool => $allowedSubIds->contains($id))
+                    ->unique()
+                    ->values()
+                    ->all();
+            }
+
             $existingSignatures = $this->existingFamilyVariantSignatures($family);
             $defaultOpts = $this->defaultSellableProductOpts($family);
             $createdProducts = [];
@@ -566,7 +584,7 @@ class RetailProductController extends Controller
             $skippedConflict = 0;
             $existingExamples = [];
 
-            foreach (RetailFamilySellableCombinations::forNewVariantOptions($family, $validOptionIds, $mainOptionIds) as $combo) {
+            foreach (RetailFamilySellableCombinations::forNewVariantOptions($family, $validOptionIds, $mainOptionIds, $subOptionIds) as $combo) {
                 $signature = RetailFamilySellableCombinations::variantSignature($family, collect($combo));
 
                 if (isset($existingSignatures[$signature])) {
@@ -1155,27 +1173,53 @@ class RetailProductController extends Controller
     }
 
     /**
-     * Data for the "which length?" picker shown when creating a sub-variant SKU
-     * under multiple main values: the main axis options, and which main values
-     * each sub option already has a SKU for (so the picker can pre-check only the
-     * missing ones).
+     * Data for the role-aware placement picker shown when creating a SKU for a new
+     * value under multiple main values:
+     *  - adding a SUB value (Colour) -> "under which MAIN (Length)?" (mainOptions)
+     *  - adding a MAIN value (Length) -> "which SUB (Colour) under it?" (subOptions)
+     * Plus per-sub coverage so the sub->main picker pre-checks only missing mains.
      *
-     * @return array{options: list<array{id: int, label: string}>, coverage: array<int, list<int>>}
+     * @return array{
+     *     mainName: ?string,
+     *     mainOptions: list<array{id: int, label: string}>,
+     *     subName: ?string,
+     *     subOptions: list<array{id: int, label: string}>,
+     *     coverage: array<int, list<int>>,
+     * }
      */
     private function mainAxisPickerData(ProductFamily $family): array
     {
+        $empty = ['mainName' => null, 'mainOptions' => [], 'subName' => null, 'subOptions' => [], 'coverage' => []];
+
         $axes = RetailFamilyVariantAxes::forFamily($family, $family->products);
 
         if (! $axes->explicit || $axes->mainGroup === null) {
-            return ['options' => [], 'coverage' => []];
+            return $empty;
         }
 
         $mainGroupId = (int) $axes->mainGroup->id;
 
-        $options = $axes->mainGroup->options
+        $mainOptions = $axes->mainGroup->options
             ->map(fn (ProductVariantOption $option): array => ['id' => (int) $option->id, 'label' => (string) $option->label])
             ->values()
             ->all();
+
+        // Sub-main picker is only offered when there is exactly one sub-main axis
+        // (the common case, e.g. Colour). With several sub axes it stays automatic.
+        $subGroups = $family->variantGroups
+            ->filter(fn (ProductVariantGroup $group): bool => $axes->isSubGroup((int) $group->id))
+            ->values();
+
+        $subName = null;
+        $subOptions = [];
+        if ($subGroups->count() === 1) {
+            $subGroup = $subGroups->first();
+            $subName = (string) $subGroup->name;
+            $subOptions = $subGroup->options
+                ->map(fn (ProductVariantOption $option): array => ['id' => (int) $option->id, 'label' => (string) $option->label])
+                ->values()
+                ->all();
+        }
 
         $coverage = [];
         foreach ($family->products as $product) {
@@ -1198,7 +1242,10 @@ class RetailProductController extends Controller
         }
 
         return [
-            'options' => $options,
+            'mainName' => (string) $axes->mainGroup->name,
+            'mainOptions' => $mainOptions,
+            'subName' => $subName,
+            'subOptions' => $subOptions,
             'coverage' => array_map(
                 fn (array $mains): array => array_values(array_map('intval', array_keys($mains))),
                 $coverage,

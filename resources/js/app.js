@@ -5833,12 +5833,18 @@ const initVariantModelChips = (root, csrf, showToast) => {
     const createSummary = root.querySelector('[data-rfm-variant-create-summary]');
     const createBtn = root.querySelector('[data-rfm-create-new-skus]');
 
-    let mainAxisOptions = [];
-    try {
-        mainAxisOptions = JSON.parse(root.dataset.rfmMainAxisOptions || '[]');
-    } catch (e) {
-        mainAxisOptions = [];
-    }
+    const parseJsonList = (raw) => {
+        try {
+            const v = JSON.parse(raw || '[]');
+            return Array.isArray(v) ? v : [];
+        } catch (e) {
+            return [];
+        }
+    };
+    const mainAxisOptions = parseJsonList(root.dataset.rfmMainAxisOptions);
+    const mainAxisName = root.dataset.rfmMainAxisName || 'main variant';
+    const subAxisOptions = parseJsonList(root.dataset.rfmSubAxisOptions);
+    const subAxisName = root.dataset.rfmSubAxisName || 'sub-variant';
 
     const normalizeChipLabel = (raw) => String(raw || '').replace(/\s+/g, ' ').trim();
     const buildDestroyUrl = (optionId) => String(destroyUrlTemplate || '').replace(/\/0(?!\d)/, `/${optionId}`);
@@ -6193,7 +6199,7 @@ const initVariantModelChips = (root, csrf, showToast) => {
         if (labelList.length) persistLabels(field, labelList);
     };
 
-    const runCreateSellableSkus = async (optionIds, mainOptionIds = []) => {
+    const runCreateSellableSkus = async (optionIds, mainOptionIds = [], subOptionIds = []) => {
         if (!createNewSkusUrl || !optionIds.length) return;
 
         const busyChips = optionIds
@@ -6212,6 +6218,7 @@ const initVariantModelChips = (root, csrf, showToast) => {
         formData.append('_token', csrf);
         optionIds.forEach((id, index) => formData.append(`option_ids[${index}]`, String(id)));
         (mainOptionIds || []).forEach((id, index) => formData.append(`main_option_ids[${index}]`, String(id)));
+        (subOptionIds || []).forEach((id, index) => formData.append(`sub_option_ids[${index}]`, String(id)));
 
         try {
             const response = await fetch(createNewSkusUrl, {
@@ -6259,19 +6266,32 @@ const initVariantModelChips = (root, csrf, showToast) => {
 
     const closeLengthPicker = () => document.querySelector('.rfm-length-picker-backdrop')?.remove();
 
-    // When a family has multiple main values (e.g. Length 16" + 20"), creating a
-    // SKU for a new sub value (Colour) is ambiguous — ask which length(s).
-    const showLengthPicker = (chip, optionId) => {
+    // Role-aware placement picker. When a family has multiple main values, creating
+    // a SKU for a new value is ambiguous, so we ask the COMPLEMENTARY-axis question:
+    //   mode 'sub'  (new Colour) -> "under which Length(s)?"  -> sends main_option_ids
+    //   mode 'main' (new Length) -> "which Colour(s) under it?" -> sends sub_option_ids
+    const showPlacementPicker = (chip, optionId, mode) => {
         closeLengthPicker();
 
         const label = chip.dataset.chipLabel
             || chip.querySelector('.rfm-vchip-label')?.textContent?.trim()
             || 'value';
+
+        const isSub = mode === 'sub';
+        const options = isSub ? mainAxisOptions : subAxisOptions;
+        const axisName = isSub ? mainAxisName : subAxisName;
+        const titleText = isSub
+            ? `Create “${label}” for which ${axisName}?`
+            : `Which ${axisName} go under “${label}”?`;
+
+        // For the sub->main direction, pre-check only the mains this colour is missing.
         let covered = [];
-        try {
-            covered = JSON.parse(chip.dataset.rfmCoveredMains || '[]').map(Number);
-        } catch (e) {
-            covered = [];
+        if (isSub) {
+            try {
+                covered = JSON.parse(chip.dataset.rfmCoveredMains || '[]').map(Number);
+            } catch (e) {
+                covered = [];
+            }
         }
 
         const backdrop = document.createElement('div');
@@ -6282,24 +6302,28 @@ const initVariantModelChips = (root, csrf, showToast) => {
 
         const title = document.createElement('div');
         title.className = 'rfm-length-picker-title';
-        title.textContent = `Create “${label}” for which length?`;
+        title.textContent = titleText;
         pop.appendChild(title);
 
         const list = document.createElement('div');
         list.className = 'rfm-length-picker-list';
-        mainAxisOptions.forEach((opt) => {
-            const exists = covered.includes(Number(opt.id));
+        options.forEach((opt) => {
+            const exists = isSub && covered.includes(Number(opt.id));
             const row = document.createElement('label');
             row.className = 'rfm-length-picker-row' + (exists ? ' is-covered' : '');
             const cb = document.createElement('input');
             cb.type = 'checkbox';
             cb.value = String(opt.id);
-            cb.checked = !exists;
+            cb.checked = !exists; // new main: all checked; sub: only missing mains
             const name = document.createElement('span');
             name.textContent = opt.label;
-            const note = document.createElement('em');
-            note.textContent = exists ? 'already exists' : 'missing';
-            row.append(cb, name, note);
+            if (isSub) {
+                const note = document.createElement('em');
+                note.textContent = exists ? 'already exists' : 'missing';
+                row.append(cb, name, note);
+            } else {
+                row.append(cb, name);
+            }
             list.appendChild(row);
         });
         pop.appendChild(list);
@@ -6331,7 +6355,12 @@ const initVariantModelChips = (root, csrf, showToast) => {
         create.addEventListener('click', async () => {
             const chosen = [...pop.querySelectorAll('input[type=checkbox]:checked')].map((c) => Number(c.value));
             closeLengthPicker();
-            if (chosen.length) await runCreateSellableSkus([optionId], chosen);
+            if (!chosen.length) return;
+            if (isSub) {
+                await runCreateSellableSkus([optionId], chosen, []);
+            } else {
+                await runCreateSellableSkus([optionId], [], chosen);
+            }
         });
     };
 
@@ -6395,9 +6424,13 @@ const initVariantModelChips = (root, csrf, showToast) => {
 
             const field = pendingChip.closest('[data-rfm-variant-chip-field]');
             const role = field?.dataset.groupRole || '';
-            // Sub-variant (e.g. Colour) under multiple main values -> ask which length.
-            if (mainAxisOptions.length >= 2 && role !== 'main' && role !== 'common') {
-                showLengthPicker(pendingChip, optionId);
+
+            // Sub-main value (e.g. Colour) + multiple mains -> ask "under which main(s)?"
+            if (role === 'sub_main' && mainAxisOptions.length >= 2) {
+                showPlacementPicker(pendingChip, optionId, 'sub');
+            // Main value (e.g. a new Length) -> ask "which sub-mains go under it?"
+            } else if (role === 'main' && subAxisOptions.length >= 2) {
+                showPlacementPicker(pendingChip, optionId, 'main');
             } else {
                 await runCreateSellableSkus([optionId]);
             }
