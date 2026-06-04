@@ -442,6 +442,16 @@
                                 <option value="__new" @selected(old('variant_type') === '__new')>+ Add new public type</option>
                             </select>
                         </label>
+                        <label class="rfm-shared-field">
+                            <span class="rfm-shared-label">Axis role</span>
+                            <select name="axis_role" data-rfm-group-role-select>
+                                <option value="" @selected(old('axis_role', '') === '')>Auto (guess)</option>
+                                @foreach ($axisRoleOptions as $roleValue => $roleLabel)
+                                    <option value="{{ $roleValue }}" @selected(old('axis_role') === $roleValue)>{{ $roleLabel }}</option>
+                                @endforeach
+                            </select>
+                            <small><strong>Main</strong> = primary axis (e.g. Length). <strong>Sub-main</strong> = secondary (e.g. Colour). <strong>Common</strong> = same on every SKU (e.g. Pack 3x).</small>
+                        </label>
                         <label class="rfm-shared-field rfm-variant-group-type-new" data-rfm-group-type-new @if(old('variant_type') !== '__new') hidden @endif>
                             <span class="rfm-shared-label">New public type</span>
                             <input type="text"
@@ -477,8 +487,28 @@
                             <article class="rfm-variant-item">
                                 <header class="rfm-variant-item-head">
                                     <div>
-                                        <h3>{{ $group->name }}</h3>
+                                        <h3>
+                                            {{ $group->name }}
+                                            <span class="rfm-variant-role-badge rfm-variant-role-badge--{{ $group->axis_role ?? 'auto' }}">{{ $group->roleLabel() ?? 'Auto' }}</span>
+                                        </h3>
                                         <span>{{ $variantGroupTypeLabels[$group->variant_type] ?? str_replace(['_', '-'], ' ', $group->variant_type) }}</span>
+                                        <form method="POST"
+                                              action="{{ route('retail-products.families.variant-groups.role', ['family' => $family, 'variantGroup' => $group]) }}"
+                                              class="rfm-variant-role-form"
+                                              data-rfm-role-form>
+                                            @csrf
+                                            @method('PATCH')
+                                            <label class="rfm-variant-role-label">
+                                                <span>Role</span>
+                                                <select name="axis_role" class="rfm-variant-role-select" data-rfm-role-select aria-label="Axis role for {{ $group->name }}">
+                                                    <option value="" @selected(! $group->hasExplicitRole())>Auto</option>
+                                                    @foreach ($axisRoleOptions as $roleValue => $roleLabel)
+                                                        <option value="{{ $roleValue }}" @selected($group->axis_role === $roleValue)>{{ $roleLabel }}</option>
+                                                    @endforeach
+                                                </select>
+                                            </label>
+                                            <noscript><button type="submit">Set</button></noscript>
+                                        </form>
                                     </div>
                                     <form method="POST"
                                           action="{{ route('retail-products.families.variant-groups.destroy', ['family' => $family, 'variantGroup' => $group]) }}"
@@ -1323,7 +1353,7 @@
                                         data-rfm-variant-chips='@json($barcodeVariantChips)'
                                         data-rfm-current-barcode="{{ $product->barcode }}"
                                         aria-label="Add or edit barcode for {{ $barcodeVariantTitle }}">
-                                    {{ $product->barcode ?: 'Barcode' }}
+                                    {{ $product->barcode ?: '+ Add barcode' }}
                                 </button>
 
                                 <div class="rfm-sku-summary-actions">

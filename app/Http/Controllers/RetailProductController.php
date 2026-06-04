@@ -26,6 +26,7 @@ use App\Support\CustomerProductDescription;
 use App\Support\HairExtensionLengthLabel;
 use App\Support\RetailFamilySellableCombinations;
 use App\Support\RetailFamilySkuGrouper;
+use App\Support\RetailFamilyVariantAxes;
 use App\Support\RetailStyleFamilyCatalogue;
 use App\Support\VariantNaturalSort;
 use Illuminate\Contracts\View\View;
@@ -342,6 +343,7 @@ class RetailProductController extends Controller
             'missingComboCount' => $this->countMissingFamilyCombos($family),
             'variantOptionSellable' => $this->variantOptionSellableMap($family),
             'variantGroupTypeOptions' => $this->variantGroupTypeOptions(),
+            'axisRoleOptions' => ProductVariantGroup::ROLE_LABELS,
             'inventoryLocations' => InventoryLocation::with(['sections' => fn ($q) => $q->where('is_active', true)->orderBy('sort_order')->orderBy('name')])->where('is_active', true)->orderBy('sort_order')->orderBy('name')->get(),
         ]);
     }
@@ -432,7 +434,10 @@ class RetailProductController extends Controller
             }
         }
 
-        $combinations = $this->cartesianFamilyVariantCombinations($family);
+        $axes = RetailFamilyVariantAxes::forFamily($family, $family->products);
+        $combinations = $axes->explicit
+            ? $this->roleGridCombos($family, $axes)
+            : $this->cartesianFamilyVariantCombinations($family);
         $existingSignatures = $this->existingFamilyVariantSignatures($family);
 
         $createdCount = 0;
@@ -975,18 +980,119 @@ class RetailProductController extends Controller
             }
         }
 
-        $existingSignatures = $this->existingFamilyVariantSignatures($family);
-        $missing = 0;
+        $axes = RetailFamilyVariantAxes::forFamily($family, $family->products);
 
-        foreach ($this->cartesianFamilyVariantCombinations($family) as $combo) {
+        if (! $axes->explicit) {
+            // Legacy families without assigned roles keep the original behaviour:
+            // a full cartesian of every axis minus the combos that already exist.
+            return count($this->missingFamilyComboList($family, $this->cartesianFamilyVariantCombinations($family)));
+        }
+
+        return count($this->missingFamilyComboList($family, $this->roleGridCombos($family, $axes)));
+    }
+
+    /**
+     * Filter a list of desired combos down to those with no matching sellable
+     * product yet (by full variant signature).
+     *
+     * @param  list<list<ProductVariantOption>>  $combos
+     * @return list<list<ProductVariantOption>>
+     */
+    private function missingFamilyComboList(ProductFamily $family, array $combos): array
+    {
+        $existingSignatures = $this->existingFamilyVariantSignatures($family);
+        $missing = [];
+
+        foreach ($combos as $combo) {
             $signature = RetailFamilySellableCombinations::variantSignature($family, collect($combo));
 
             if (! isset($existingSignatures[$signature])) {
-                $missing++;
+                $missing[] = $combo;
             }
         }
 
         return $missing;
+    }
+
+    /**
+     * The combinations the role model says SHOULD exist for this family:
+     *   (each MAIN value) x (cartesian of SUB-MAIN values), with COMMON pinned.
+     * This is what makes "All combinations covered" honest — the contaminated
+     * full cartesian (e.g. a stray Pack count axis) no longer defines the grid.
+     *
+     * @return list<list<ProductVariantOption>>
+     */
+    private function roleGridCombos(ProductFamily $family, RetailFamilyVariantAxes $axes): array
+    {
+        $pinnedCommon = $axes->pinnedCommonOptions($family, $family->products);
+
+        // Every common group must resolve to a pinned value, else the grid is undefined.
+        foreach ($family->variantGroups as $group) {
+            if ($axes->isCommonGroup((int) $group->id) && ! isset($pinnedCommon[(int) $group->id])) {
+                return [];
+            }
+        }
+
+        $mainGroup = $axes->mainGroup;
+        $mainOptions = $mainGroup !== null ? $mainGroup->options->all() : [null];
+        $subGroups = $family->variantGroups
+            ->filter(fn (ProductVariantGroup $group): bool => $axes->isSubGroup((int) $group->id))
+            ->sortBy('sort_order')
+            ->values();
+
+        $combos = [];
+
+        foreach ($mainOptions as $mainOption) {
+            foreach ($this->subOptionCartesian($subGroups) as $subRow) {
+                $combo = [];
+
+                foreach ($family->variantGroups as $group) {
+                    $groupId = (int) $group->id;
+
+                    if (isset($pinnedCommon[$groupId])) {
+                        $combo[] = $pinnedCommon[$groupId];
+                    } elseif ($mainGroup !== null && $groupId === (int) $mainGroup->id && $mainOption !== null) {
+                        $mainOption->setRelation('group', $group);
+                        $combo[] = $mainOption;
+                    } elseif (isset($subRow[$groupId])) {
+                        $combo[] = $subRow[$groupId];
+                    }
+                }
+
+                if (count($combo) === $family->variantGroups->count()) {
+                    $combos[] = $combo;
+                }
+            }
+        }
+
+        return $combos;
+    }
+
+    /**
+     * Cartesian product of the sub-main groups' options, keyed by group id.
+     *
+     * @param  Collection<int, ProductVariantGroup>  $subGroups
+     * @return list<array<int, ProductVariantOption>>
+     */
+    private function subOptionCartesian(Collection $subGroups): array
+    {
+        $rows = [[]];
+
+        foreach ($subGroups as $group) {
+            $groupId = (int) $group->id;
+            $next = [];
+
+            foreach ($rows as $row) {
+                foreach ($group->options as $option) {
+                    $option->setRelation('group', $group);
+                    $next[] = $row + [$groupId => $option];
+                }
+            }
+
+            $rows = $next;
+        }
+
+        return $rows;
     }
 
     /**
@@ -1494,6 +1600,7 @@ class RetailProductController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'variant_type' => ['required', 'string', 'max:100'],
             'new_variant_type_name' => ['nullable', 'string', 'max:255'],
+            'axis_role' => ['nullable', Rule::in(array_keys(ProductVariantGroup::ROLE_LABELS))],
         ]);
 
         $name = trim(preg_replace('/\s+/', ' ', (string) $data['name']));
@@ -1519,10 +1626,44 @@ class RetailProductController extends Controller
             $data['new_variant_type_name'] ?? null,
         );
 
+        $existingGroups = $family->variantGroups()->get();
+        $axisRole = $data['axis_role'] ?? null;
+
+        // A family may only have ONE pack/bundle/count axis — a second one is
+        // what created the "3x x 3X" duplicate-count SKU explosion.
+        if ($this->isCountConceptVariantType($variantType, $name)) {
+            $existingCount = $existingGroups->first(
+                fn (ProductVariantGroup $group): bool => $this->isCountConceptVariantType((string) $group->variant_type, (string) $group->name),
+            );
+
+            if ($existingCount) {
+                throw ValidationException::withMessages([
+                    'variant_type' => "This family already has a pack/count axis (\"{$existingCount->name}\"). Add values to it instead of a second count axis.",
+                ]);
+            }
+
+            // A count axis is always pinned/common in this model.
+            $axisRole ??= ProductVariantGroup::AXIS_ROLE_COMMON;
+        }
+
+        // At most one MAIN axis per family.
+        if ($axisRole === ProductVariantGroup::AXIS_ROLE_MAIN) {
+            $existingMain = $existingGroups->first(
+                fn (ProductVariantGroup $group): bool => $group->isMainRole(),
+            );
+
+            if ($existingMain) {
+                throw ValidationException::withMessages([
+                    'axis_role' => "\"{$existingMain->name}\" is already the main axis. Pick Sub-main or Common, or change the main axis first.",
+                ]);
+            }
+        }
+
         ProductVariantGroup::query()->create([
             'product_family_id' => $family->id,
             'name' => $name,
             'variant_type' => $variantType,
+            'axis_role' => $axisRole,
             'sort_order' => ((int) ProductVariantGroup::query()
                 ->where('product_family_id', $family->id)
                 ->max('sort_order')) + 10,
@@ -1531,6 +1672,59 @@ class RetailProductController extends Controller
         return redirect()
             ->to(route('retail-products.families.show', $family).'#rfm-variant-model')
             ->with('status', "Added variant group \"{$name}\". Add values, then create SKUs from the combination.");
+    }
+
+    /**
+     * Set the axis role (main / sub-main / common) on an existing variant group.
+     * Enforces the same model rules as creation: at most one main axis, and a
+     * pack/count axis stays common.
+     */
+    public function updateFamilyVariantGroupRole(Request $request, ProductFamily $family, ProductVariantGroup $variantGroup): RedirectResponse|JsonResponse
+    {
+        $group = $this->familyVariantGroup($family, (int) $variantGroup->id);
+
+        $data = $request->validate([
+            'axis_role' => ['nullable', Rule::in(array_keys(ProductVariantGroup::ROLE_LABELS))],
+        ]);
+
+        $axisRole = $data['axis_role'] ?? null;
+        $others = $family->variantGroups()->where('id', '!=', $group->id)->get();
+
+        if ($axisRole === ProductVariantGroup::AXIS_ROLE_MAIN) {
+            $existingMain = $others->first(fn (ProductVariantGroup $g): bool => $g->isMainRole());
+
+            if ($existingMain) {
+                throw ValidationException::withMessages([
+                    'axis_role' => "\"{$existingMain->name}\" is already the main axis. Change it first.",
+                ]);
+            }
+        }
+
+        // A pack/count axis must stay common — it is always pinned across SKUs.
+        if ($this->isCountConceptVariantType((string) $group->variant_type, (string) $group->name)
+            && $axisRole !== null
+            && $axisRole !== ProductVariantGroup::AXIS_ROLE_COMMON) {
+            throw ValidationException::withMessages([
+                'axis_role' => "\"{$group->name}\" is a pack/count axis and must stay Common.",
+            ]);
+        }
+
+        $group->update(['axis_role' => $axisRole]);
+
+        $label = ProductVariantGroup::ROLE_LABELS[$axisRole] ?? 'Auto';
+        $message = "Set \"{$group->name}\" to {$label}.";
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'message' => $message,
+                'axis_role' => $axisRole,
+                'group_id' => $group->id,
+            ]);
+        }
+
+        return redirect()
+            ->to(route('retail-products.families.show', $family).'#rfm-variant-model')
+            ->with('status', $message);
     }
 
     /**
@@ -1886,6 +2080,41 @@ class RetailProductController extends Controller
                 'created' => false,
                 'option_payload' => $this->variantOptionPayload($duplicate),
                 'sellable' => $this->variantOptionSellablePayload($family, $duplicate),
+            ];
+        }
+
+        // A value may not also live on ANOTHER axis of this family. That ambiguity
+        // (e.g. "Grey" as both a Pack value and a Colour value) is what produced
+        // the nonsense "3x x Grey x Grey" SKUs.
+        $crossAxis = ProductVariantOption::query()
+            ->whereIn(
+                'product_variant_group_id',
+                $family->variantGroups()->where('id', '!=', $group->id)->pluck('id'),
+            )
+            ->whereRaw('LOWER(label) = ?', [mb_strtolower($label)])
+            ->with('group')
+            ->first();
+
+        if ($crossAxis) {
+            $otherName = $crossAxis->group?->name ?? 'another axis';
+
+            if ($rejectDuplicates) {
+                throw ValidationException::withMessages([
+                    'label' => "\"{$label}\" is already a value on \"{$otherName}\". A value can only belong to one axis.",
+                ]);
+            }
+
+            $family->load([
+                'variantGroups.options',
+                'products.variantValues.option',
+                'products.variantValues.group',
+            ]);
+
+            return [
+                'option' => $crossAxis,
+                'created' => false,
+                'option_payload' => $this->variantOptionPayload($crossAxis),
+                'sellable' => $this->variantOptionSellablePayload($family, $crossAxis),
             ];
         }
 
@@ -3449,17 +3678,27 @@ class RetailProductController extends Controller
      */
     private function generatedRetailProductNameWithBase(string $baseName, Collection $selectedOptions): string
     {
-        $labels = $selectedOptions
+        // Order by role (main -> sub-main -> common), then by sort order, so the
+        // title reads naturally; dedupe case-insensitively so a 3x bundle never
+        // renders as "3x - 3X" and a single shade never as "Grey - Grey".
+        $rolePriority = [
+            ProductVariantGroup::AXIS_ROLE_MAIN => 0,
+            ProductVariantGroup::AXIS_ROLE_SUB_MAIN => 1,
+            ProductVariantGroup::AXIS_ROLE_COMMON => 2,
+        ];
+
+        $ordered = $selectedOptions
             ->sortBy(fn (ProductVariantOption $option): string => sprintf(
-                '%04d:%04d:%s',
+                '%02d:%04d:%04d:%s',
+                $rolePriority[$option->group?->axis_role] ?? 1,
                 (int) ($option->group?->sort_order ?? 0),
                 (int) $option->sort_order,
-                $option->label,
+                (string) $option->label,
             ))
             ->pluck('label')
-            ->filter()
-            ->implode(' - ');
+            ->all();
 
+        $labels = implode(' - ', $this->uniqueVariantLabels($ordered));
         $base = trim($baseName);
 
         return $labels !== '' ? "{$base} - {$labels}" : $base;
@@ -3698,6 +3937,24 @@ class RetailProductController extends Controller
         }
 
         return $selectedType;
+    }
+
+    /**
+     * A pack / bundle / count concept axis. A family may hold only one of these
+     * (it is always pinned/common); a second one is what produced the duplicate
+     * "Bundle 3x" + "Pack 3X" count explosion.
+     */
+    private function isCountConceptVariantType(string $typeSlug, string $name): bool
+    {
+        foreach ([Str::lower(trim($typeSlug)), Str::lower(trim($name))] as $haystack) {
+            foreach (['count', 'pack', 'bundle', 'quantity'] as $needle) {
+                if ($haystack !== '' && str_contains($haystack, $needle)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     /**

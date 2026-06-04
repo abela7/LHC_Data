@@ -2854,6 +2854,13 @@ const initRetailFamilyManager = () => {
         syncCustomType();
     });
 
+    // Inline axis-role change: submit the PATCH form as soon as a role is picked.
+    root.querySelectorAll('[data-rfm-role-select]').forEach((select) => {
+        const form = select.closest('[data-rfm-role-form]');
+        if (!form) return;
+        select.addEventListener('change', () => form.submit());
+    });
+
     // SKU filters (multi-select)
     const getSkuItems = () => root.querySelectorAll('[data-rfm-sku]');
     const searchInput = root.querySelector('[data-rfm-search]');

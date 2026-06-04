@@ -10455,6 +10455,33 @@
         color: #7a5c2a;
     }
 
+    .rfm-variant-role-badge {
+        @apply ml-1.5 inline-flex items-center rounded-full px-2 py-0.5 align-middle text-[10px] font-black uppercase tracking-wide;
+        border: 1px solid #c9d8cf;
+        background: #eef4f0;
+        color: #2f6b54;
+    }
+
+    .rfm-variant-role-badge--auto {
+        border-color: #d9d4c8;
+        background: #f4f1ea;
+        color: #6b6552;
+    }
+
+    .rfm-variant-role-form {
+        @apply mt-1 flex items-center gap-1.5;
+    }
+
+    .rfm-variant-role-label {
+        @apply inline-flex items-center gap-1 text-[11px] font-bold text-stone-500;
+    }
+
+    .rfm-variant-role-select {
+        @apply min-h-8 rounded-lg border px-2 text-xs font-bold;
+        border-color: #d9d4c8;
+        background: #fff;
+    }
+
     .rfm-section[open] > summary {
         border-bottom: 1px solid var(--color-edge);
     }

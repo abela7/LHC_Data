@@ -203,6 +203,9 @@ Route::patch('/retail-products/families/{family}/display-name', [RetailProductCo
 Route::patch('/retail-products/families/{family}/variant-pricing', [RetailProductController::class, 'updateFamilyVariantPricing'])->name('retail-products.families.variant-pricing.update');
 Route::post('/retail-products/families/{family}/refresh-skus', [RetailProductController::class, 'refreshFamilyMissingSkus'])->name('retail-products.families.refresh-skus');
 Route::post('/retail-products/families/{family}/variant-groups', [RetailProductController::class, 'storeFamilyVariantGroup'])->name('retail-products.families.variant-groups.store');
+Route::patch('/retail-products/families/{family}/variant-groups/{variantGroup}/role', [RetailProductController::class, 'updateFamilyVariantGroupRole'])
+    ->name('retail-products.families.variant-groups.role')
+    ->scopeBindings();
 Route::post('/retail-products/families/{family}/variant-groups/{variantGroup}/remove', [RetailProductController::class, 'destroyFamilyVariantGroup'])
     ->name('retail-products.families.variant-groups.destroy')
     ->scopeBindings();

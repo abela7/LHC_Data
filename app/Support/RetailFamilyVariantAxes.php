@@ -24,6 +24,7 @@ final class RetailFamilyVariantAxes
         public readonly ?ProductVariantGroup $mainGroup,
         public readonly Collection $commonGroupIds,
         public readonly Collection $subGroupIds,
+        public readonly bool $explicit = false,
     ) {}
 
     public static function forFamily(ProductFamily $family, Collection $products): self
@@ -32,6 +33,55 @@ final class RetailFamilyVariantAxes
             $family->loadMissing('variantGroups');
         }
 
+        if (self::familyHasExplicitRoles($family)) {
+            return self::fromExplicitRoles($family);
+        }
+
+        return self::fromHeuristic($family, $products);
+    }
+
+    /**
+     * True only when every group on the family carries a user-assigned role.
+     * A partially-tagged family falls back to the heuristic so the page never
+     * builds combos against a half-defined model.
+     */
+    private static function familyHasExplicitRoles(ProductFamily $family): bool
+    {
+        $groups = $family->variantGroups;
+
+        return $groups->isNotEmpty()
+            && $groups->every(fn (ProductVariantGroup $group): bool => $group->hasExplicitRole());
+    }
+
+    /**
+     * Build axes straight from the explicit axis_role on each group:
+     *   common   -> pinned to one family-wide value
+     *   main     -> the single primary differentiator
+     *   sub_main -> the remaining differentiators
+     */
+    private static function fromExplicitRoles(ProductFamily $family): self
+    {
+        $commonGroupIds = $family->variantGroups
+            ->filter(fn (ProductVariantGroup $group): bool => $group->isCommonRole())
+            ->pluck('id')
+            ->map(fn (mixed $id): int => (int) $id)
+            ->flip();
+
+        $mainGroup = $family->variantGroups
+            ->sortBy('sort_order')
+            ->first(fn (ProductVariantGroup $group): bool => $group->isMainRole());
+
+        $subGroupIds = $family->variantGroups
+            ->filter(fn (ProductVariantGroup $group): bool => $group->isSubMainRole())
+            ->pluck('id')
+            ->map(fn (mixed $id): int => (int) $id)
+            ->values();
+
+        return new self($mainGroup, $commonGroupIds, $subGroupIds, explicit: true);
+    }
+
+    private static function fromHeuristic(ProductFamily $family, Collection $products): self
+    {
         $allVariantValues = $products->flatMap(fn (Product $product) => $product->variantValues);
 
         $commonGroupIds = $family->variantGroups
