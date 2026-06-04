@@ -3157,8 +3157,10 @@ const initRetailFamilyManager = () => {
             visibleItems.length === 0,
         );
 
-        const workspace = document.getElementById('rfm-skus-workspace');
-        workspace?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        if (detail.scrollWorkspace !== false) {
+            const workspace = document.getElementById('rfm-skus-workspace');
+            workspace?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
 
         root.querySelectorAll('[data-rfm-sku]').forEach((row) => {
             const ids = (row.dataset.rfmVariantOptions || '').split(/\s+/).filter(Boolean);
@@ -5932,7 +5934,7 @@ const initVariantModelChips = (root, csrf, showToast) => {
 
             if (missing > 0) {
                 status.className = 'rfm-vchip-pending';
-                status.title = 'Click to create sellable SKUs for this value';
+                status.title = 'Use Create sellable SKUs below when ready';
                 status.textContent = 'Pending';
             } else {
                 status.className = 'rfm-vchip-ready';
@@ -6030,6 +6032,7 @@ const initVariantModelChips = (root, csrf, showToast) => {
                 groupName: field?.dataset.groupName || '',
                 label: chip?.dataset.chipLabel || '',
                 toggle: false,
+                scrollWorkspace: false,
             },
         }));
     };
@@ -6306,7 +6309,7 @@ const initVariantModelChips = (root, csrf, showToast) => {
         const status = document.createElement('span');
         status.className = missing > 0 ? 'rfm-vchip-pending' : 'rfm-vchip-ready';
         status.title = missing > 0
-            ? 'Sellable SKU not created yet'
+            ? 'Use Create sellable SKUs below when ready'
             : 'Show SKUs for this value';
         status.textContent = missing > 0 ? 'Pending' : 'View SKUs';
         if (missing === 0) {
@@ -6385,8 +6388,18 @@ const initVariantModelChips = (root, csrf, showToast) => {
 
             updateCreateBar();
 
-            // Ask the placement question (which main / which subs) right away, then create.
-            if (newOptions.length) promptPlacementAndCreate(field, newOptions);
+            if (newOptions.length) {
+                const savedLabels = newOptions.map((o) => o.label).filter(Boolean).join(', ');
+                const readyCount = pendingOptionIds().reduce((sum, id) => {
+                    const chip = root.querySelector(`[data-rfm-vchip][data-option-id="${id}"]`);
+                    return sum + (Number(chip?.dataset.rfmMissing) || 0);
+                }, 0);
+                const readyPart = readyCount > 0
+                    ? ` ${readyCount} sellable product${readyCount === 1 ? '' : 's'} ready — press Create sellable SKUs.`
+                    : ' Press Create sellable SKUs when you are ready.';
+                showToast(savedLabels ? `Saved “${savedLabels}”.${readyPart}` : `Value saved.${readyPart}`);
+                focusCreateBar();
+            }
         } catch (err) {
             savingChips.forEach((chip) => chip.remove());
             showToast(err.message || 'Could not save values.', true);
@@ -6514,11 +6527,6 @@ const initVariantModelChips = (root, csrf, showToast) => {
                     message += ` Already existed for ${skippedExistingScopeName}: ${skippedExistingScopeLabels.join(', ')}.`;
                 }
                 showToast(message);
-
-                if (createdCount > 0) {
-                    const skusWorkspace = document.getElementById('rfm-skus-workspace');
-                    skusWorkspace?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                }
             }
         } catch (err) {
             showToast(err.message || 'Could not create sellable products.', true);
@@ -6539,8 +6547,7 @@ const initVariantModelChips = (root, csrf, showToast) => {
     // a SKU for a new value is ambiguous, so we ask the COMPLEMENTARY-axis question:
     //   mode 'sub'  (new Colour) -> "under which Length(s)?"  -> sends main_option_ids
     //   mode 'main' (new Length) -> "which Colour(s) under it?" -> sends sub_option_ids
-    // Fired right when a value is added (comma/Enter), so placement is decided
-    // BEFORE the SKUs are created.
+    // Fired from Create sellable SKUs when scope is ambiguous (multiple mains/subs).
     const showPlacementPicker = ({ optionIds, mode, anchorEl, label, covered = [] }) => {
         closeLengthPicker();
 
@@ -6628,65 +6635,80 @@ const initVariantModelChips = (root, csrf, showToast) => {
         return [...scope.querySelectorAll('[data-rfm-main-scope-opt]:checked')].map((c) => Number(c.value));
     };
 
-    // Decide placement right after value(s) are added (comma/Enter), then create.
-    const promptPlacementAndCreate = (field, newOptions) => {
-        const optionIds = newOptions.map((o) => Number(o.id)).filter((id) => id > 0);
-        if (!optionIds.length) return;
-        const role = field?.dataset.groupRole || '';
-        const label = newOptions.map((o) => o.label).filter(Boolean).join(', ') || 'value';
-        const anchorEl = field?.querySelector('[data-rfm-variant-chip-input]') || field;
-
-        if (role === 'sub_main' && mainAxisOptions.length >= 2) {
-            // Persistent scope picked once -> bulk-create under it, no per-value popup.
-            const scopeMains = selectedScopeMains(field);
-            if (scopeMains !== null) {
-                if (scopeMains.length) {
-                    runCreateSellableSkus(optionIds, scopeMains, []);
-                } else {
-                    showToast(`Tick at least one ${mainAxisName} above to add new ${field.dataset.groupName || 'values'}.`, true);
-                }
-                return;
-            }
-            showPlacementPicker({ optionIds, mode: 'sub', anchorEl, label, covered: [] });
-        } else if (role === 'main' && subAxisOptions.length >= 2) {
-            showPlacementPicker({ optionIds, mode: 'main', anchorEl, label, covered: [] });
-        } else {
-            // No ambiguity (single complementary value) — just create.
-            runCreateSellableSkus(optionIds);
+    const focusCreateBar = () => {
+        if (!createBar) {
+            return;
         }
+
+        createBar.hidden = false;
+        createBar.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        createBtn?.focus({ preventScroll: true });
     };
 
-    const createPendingChip = async (chip) => {
-        const optionId = Number(chip?.dataset.optionId);
-        if (optionId <= 0) return;
+    const createSellablesForField = async (field, optionIds) => {
+        const ids = (optionIds || []).map(Number).filter((id) => id > 0);
+        if (!ids.length) {
+            return;
+        }
 
-        const field = chip.closest('[data-rfm-variant-chip-field]');
         const role = field?.dataset.groupRole || '';
+        const label = ids
+            .map((id) => root.querySelector(`[data-rfm-vchip][data-option-id="${id}"]`)?.dataset.chipLabel)
+            .filter(Boolean)
+            .join(', ') || 'values';
+        const anchorEl = createBar || field?.querySelector('[data-rfm-variant-chip-input]') || field;
 
         if (role === 'sub_main' && mainAxisOptions.length >= 2) {
             const scopeMains = selectedScopeMains(field);
             if (scopeMains !== null) {
                 if (!scopeMains.length) {
-                    showToast(`Tick at least one ${mainAxisName} above to add new ${field.dataset.groupName || 'values'}.`, true);
+                    showToast(
+                        `Tick at least one ${mainAxisName} above to create sellables for ${field.dataset.groupName || 'these values'}.`,
+                        true,
+                    );
                     return;
                 }
 
-                await runCreateSellableSkus([optionId], scopeMains, []);
+                await runCreateSellableSkus(ids, scopeMains, []);
                 return;
             }
+
+            showPlacementPicker({ optionIds: ids, mode: 'sub', anchorEl, label, covered: [] });
+            return;
         }
 
-        await runCreateSellableSkus([optionId]);
+        if (role === 'main' && subAxisOptions.length >= 2) {
+            showPlacementPicker({ optionIds: ids, mode: 'main', anchorEl, label, covered: [] });
+            return;
+        }
+
+        await runCreateSellableSkus(ids);
     };
 
     if (createBtn && createNewSkusUrl) {
         createBtn.addEventListener('click', async () => {
-            const chips = pendingOptionIds()
-                .map((id) => root.querySelector(`[data-rfm-vchip][data-option-id="${id}"]`))
-                .filter(Boolean);
+            const pendingIds = pendingOptionIds();
+            if (!pendingIds.length) {
+                return;
+            }
 
-            for (const chip of chips) {
-                await createPendingChip(chip);
+            const byField = new Map();
+            pendingIds.forEach((id) => {
+                const chip = root.querySelector(`[data-rfm-vchip][data-option-id="${id}"]`);
+                const field = chip?.closest('[data-rfm-variant-chip-field]');
+                const groupId = field?.dataset.groupId || '';
+                if (!groupId || !field) {
+                    return;
+                }
+
+                if (!byField.has(groupId)) {
+                    byField.set(groupId, { field, ids: [] });
+                }
+                byField.get(groupId).ids.push(id);
+            });
+
+            for (const { field, ids } of byField.values()) {
+                await createSellablesForField(field, ids);
             }
         });
     }
@@ -6758,45 +6780,9 @@ const initVariantModelChips = (root, csrf, showToast) => {
         }
 
         const pendingChip = event.target.closest('[data-rfm-vchip].needs-sku');
-        if (pendingChip && !event.target.closest('[data-rfm-vchip-delete]') && createNewSkusUrl) {
+        if (pendingChip && !event.target.closest('[data-rfm-vchip-delete]')) {
             event.preventDefault();
-            if (pendingChip.classList.contains('is-busy')) return;
-            const optionId = Number(pendingChip.dataset.optionId);
-            if (optionId <= 0) return;
-
-            const field = pendingChip.closest('[data-rfm-variant-chip-field]');
-            const role = field?.dataset.groupRole || '';
-            const chipLabel = pendingChip.dataset.chipLabel
-                || pendingChip.querySelector('.rfm-vchip-label')?.textContent?.trim()
-                || 'value';
-
-            // Sub-main value (e.g. Colour) + multiple mains -> use the persistent
-            // scope row first; otherwise ask "under which main(s)?".
-            if (role === 'sub_main' && mainAxisOptions.length >= 2) {
-                const scopeMains = selectedScopeMains(field);
-                if (scopeMains !== null) {
-                    if (!scopeMains.length) {
-                        showToast(`Tick at least one ${mainAxisName} above to add ${chipLabel}.`, true);
-                        return;
-                    }
-
-                    await runCreateSellableSkus([optionId], scopeMains, []);
-                    return;
-                }
-
-                let covered = [];
-                try {
-                    covered = JSON.parse(pendingChip.dataset.rfmCoveredMains || '[]').map(Number);
-                } catch (e) {
-                    covered = [];
-                }
-                showPlacementPicker({ optionIds: [optionId], mode: 'sub', anchorEl: pendingChip, label: chipLabel, covered });
-            // Main value (e.g. a new Length) -> ask "which sub-mains go under it?"
-            } else if (role === 'main' && subAxisOptions.length >= 2) {
-                showPlacementPicker({ optionIds: [optionId], mode: 'main', anchorEl: pendingChip, label: chipLabel, covered: [] });
-            } else {
-                await runCreateSellableSkus([optionId]);
-            }
+            focusCreateBar();
             return;
         }
 

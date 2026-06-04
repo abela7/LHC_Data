@@ -624,7 +624,7 @@
                     <div class="rfm-variant-create-bar" data-rfm-variant-create-bar hidden>
                         <div class="rfm-variant-create-bar-copy">
                             <strong data-rfm-variant-create-title>New variant values ready</strong>
-                            <p data-rfm-variant-create-summary>Creates one sellable per main variant (e.g. length), keeping common variants (bundle, pack) fixed and applying each new sub-variant (e.g. colour) you added.</p>
+                            <p data-rfm-variant-create-summary>Add variant values above, then create sellables here with your family name, price and details.</p>
                         </div>
                         <button type="button"
                                 class="rfm-variant-create-bar-btn"
