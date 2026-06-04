@@ -10691,14 +10691,86 @@
         color: var(--color-ink);
     }
 
+    .rfm-sku-create-preview-hint {
+        @apply mt-1.5 text-xs leading-snug;
+        color: #5c665f;
+        margin-bottom: 0;
+    }
+
     .rfm-sku-create-preview-list {
         @apply m-0 flex-1 list-none space-y-2 overflow-y-auto p-3;
     }
 
     .rfm-sku-create-preview-item {
-        @apply flex flex-col gap-0.5 rounded-xl border px-3 py-2.5;
+        @apply flex items-start gap-2.5 rounded-xl border px-2.5 py-2.5 transition;
         border-color: #eadfcc;
         background: #fff;
+    }
+
+    .rfm-sku-create-preview-item:not(.is-included) {
+        opacity: 0.55;
+        background: #f8f6f1;
+    }
+
+    .rfm-sku-create-preview-toggle {
+        @apply mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-full border text-sm font-black;
+        border-color: var(--color-edge);
+        background: #fff;
+        color: #5c665f;
+    }
+
+    .rfm-sku-create-preview-item.is-included .rfm-sku-create-preview-toggle {
+        border-color: var(--color-accent);
+        background: var(--color-accent);
+        color: #fffdf8;
+    }
+
+    .rfm-sku-create-preview-item.is-included .rfm-sku-create-preview-toggle::before {
+        content: '✓';
+    }
+
+    .rfm-sku-create-preview-item-body {
+        @apply flex min-w-0 flex-1 flex-col gap-0.5;
+    }
+
+    .rfm-sku-create-preview-discard {
+        @apply shrink-0 border-t px-4 py-3;
+        border-color: #eadfcc;
+        background: rgba(255, 248, 235, 0.65);
+    }
+
+    .rfm-sku-create-preview-discard-title {
+        @apply text-xs font-bold uppercase tracking-wide;
+        color: #8a2a22;
+        margin: 0 0 0.25rem;
+    }
+
+    .rfm-sku-create-preview-discard-hint {
+        @apply text-xs leading-snug;
+        color: #5c665f;
+        margin: 0 0 0.75rem;
+    }
+
+    .rfm-sku-create-preview-discard-list {
+        @apply m-0 list-none space-y-1.5 p-0;
+    }
+
+    .rfm-sku-create-preview-discard-row {
+        @apply flex items-center justify-between gap-2 rounded-lg border px-2.5 py-2;
+        border-color: rgba(138, 42, 34, 0.2);
+        background: #fff;
+    }
+
+    .rfm-sku-create-preview-discard-label {
+        @apply min-w-0 flex-1 text-sm font-semibold;
+        color: var(--color-ink);
+    }
+
+    .rfm-sku-create-preview-discard-btn {
+        @apply shrink-0 rounded-lg border px-2.5 py-1 text-xs font-bold;
+        border-color: rgba(138, 42, 34, 0.35);
+        background: #fff5f4;
+        color: #8a2a22;
     }
 
     .rfm-sku-create-preview-name {

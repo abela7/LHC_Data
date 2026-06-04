@@ -529,16 +529,24 @@ class RetailProductController extends Controller
             $validOptionIds = $resolved['valid_option_ids'];
             $mainOptionIds = $resolved['main_option_ids'];
             $subOptionIds = $resolved['sub_option_ids'];
+            $comboSignatures = $resolved['combo_signatures'];
 
             $existingSignatures = $this->existingFamilyVariantSignatures($family);
             $defaultOpts = $this->defaultSellableProductOpts($family);
             $createdProducts = [];
             $skippedExisting = 0;
             $skippedConflict = 0;
+            $skippedByChoice = 0;
             $existingExamples = [];
 
             foreach (RetailFamilySellableCombinations::forNewVariantOptions($family, $validOptionIds, $mainOptionIds, $subOptionIds) as $combo) {
                 $signature = RetailFamilySellableCombinations::variantSignature($family, collect($combo));
+
+                if ($comboSignatures !== null && ! in_array($signature, $comboSignatures, true)) {
+                    $skippedByChoice++;
+
+                    continue;
+                }
 
                 if (isset($existingSignatures[$signature])) {
                     $skippedExisting++;
@@ -602,12 +610,16 @@ class RetailProductController extends Controller
             if ($skippedConflict > 0 && $createdCount > 0) {
                 $message .= " {$skippedConflict} skipped (catalogue conflict).";
             }
+            if ($skippedByChoice > 0 && $createdCount > 0) {
+                $message .= " {$skippedByChoice} not created (you skipped them in review).";
+            }
 
             return response()->json([
                 'message' => $message,
                 'created_count' => $createdCount,
                 'skipped_existing' => $skippedExisting,
                 'skipped_conflict' => $skippedConflict,
+                'skipped_by_choice' => $skippedByChoice,
                 'products' => $createdProducts,
                 'existing_examples' => $existingExamples,
                 'variant_option_sellable' => $this->variantOptionSellableMap($family),
@@ -629,6 +641,7 @@ class RetailProductController extends Controller
      *     valid_option_ids: Collection<int, int>,
      *     main_option_ids: list<int>,
      *     sub_option_ids: list<int>,
+     *     combo_signatures: ?list<string>,
      * }|JsonResponse
      */
     private function resolveNewVariantSkuCreateRequest(Request $request, ProductFamily $family): array|JsonResponse
@@ -640,6 +653,8 @@ class RetailProductController extends Controller
             'main_option_ids.*' => ['integer'],
             'sub_option_ids' => ['nullable', 'array'],
             'sub_option_ids.*' => ['integer'],
+            'combo_signatures' => ['nullable', 'array'],
+            'combo_signatures.*' => ['string', 'max:500'],
         ]);
 
         $family->load([
@@ -742,11 +757,22 @@ class RetailProductController extends Controller
             ], 422);
         }
 
+        $comboSignatures = null;
+        if (array_key_exists('combo_signatures', $data)) {
+            $comboSignatures = collect($data['combo_signatures'] ?? [])
+                ->map(fn (mixed $signature): string => trim((string) $signature))
+                ->filter(fn (string $signature): bool => $signature !== '')
+                ->unique()
+                ->values()
+                ->all();
+        }
+
         return [
             'family' => $family,
             'valid_option_ids' => $validOptionIds,
             'main_option_ids' => $mainOptionIds,
             'sub_option_ids' => $subOptionIds,
+            'combo_signatures' => $comboSignatures,
         ];
     }
 
@@ -761,7 +787,16 @@ class RetailProductController extends Controller
      *     family_display_name: string,
      *     family_price_label: string,
      *     retail_price: ?float,
-     *     to_create: list<array{name: string, variants: string, retail_price: ?float, retail_price_label: ?string, needs_price: bool}>,
+     *     pending_values: list<array{id: int, label: string, group_name: string}>,
+     *     to_create: list<array{
+     *         name: string,
+     *         variants: string,
+     *         retail_price: ?float,
+     *         retail_price_label: ?string,
+     *         needs_price: bool,
+     *         variant_signature: string,
+     *         new_option_ids: list<int>,
+     *     }>,
      *     already_exist: list<array{name: string, variants: string, retail_price: ?float, retail_price_label: ?string, sku: ?string}>,
      *     create_count: int,
      *     skipped_existing: int,
@@ -783,6 +818,7 @@ class RetailProductController extends Controller
         $toCreate = [];
         $alreadyExist = [];
         $groupsById = $family->variantGroups->keyBy('id');
+        $validIdSet = $validOptionIds->flip();
 
         foreach (RetailFamilySellableCombinations::forNewVariantOptions($family, $validOptionIds, $mainOptionIds, $subOptionIds) as $combo) {
             $signature = RetailFamilySellableCombinations::variantSignature($family, collect($combo));
@@ -803,12 +839,19 @@ class RetailProductController extends Controller
                 })
                 ->implode(' · ');
             $name = $this->generatedRetailProductName($family, collect($combo));
+            $newOptionIds = collect($combo)
+                ->filter(fn (ProductVariantOption $option): bool => $validIdSet->has((int) $option->id))
+                ->map(fn (ProductVariantOption $option): int => (int) $option->id)
+                ->values()
+                ->all();
             $row = [
                 'name' => $name,
                 'variants' => $variants,
                 'retail_price' => $retailPrice,
                 'retail_price_label' => $this->formatRetailGbpPrice($retailPrice),
                 'needs_price' => $retailPrice === null,
+                'variant_signature' => $signature,
+                'new_option_ids' => $newOptionIds,
             ];
 
             if (isset($existingSignatures[$signature])) {
@@ -827,10 +870,27 @@ class RetailProductController extends Controller
             ? $this->formatRetailGbpPrice($retailPrice).' per SKU (from family)'
             : 'No shared price yet — set in family details or on each SKU after create';
 
+        $pendingValues = ProductVariantOption::query()
+            ->whereIn('id', $validOptionIds->all())
+            ->orderBy('label')
+            ->get()
+            ->map(function (ProductVariantOption $option) use ($groupsById): array {
+                $group = $groupsById->get((int) $option->product_variant_group_id);
+
+                return [
+                    'id' => (int) $option->id,
+                    'label' => (string) $option->label,
+                    'group_name' => (string) ($group?->name ?? 'Variant'),
+                ];
+            })
+            ->values()
+            ->all();
+
         return [
             'family_display_name' => $this->familyDisplayBaseName($family),
             'family_price_label' => $familyPriceLabel,
             'retail_price' => $retailPrice,
+            'pending_values' => $pendingValues,
             'to_create' => $toCreate,
             'already_exist' => $alreadyExist,
             'create_count' => count($toCreate),

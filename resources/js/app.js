@@ -6291,6 +6291,36 @@ const initVariantModelChips = (root, csrf, showToast) => {
         `Remove "${label}" from this variant group?\n\nAny sellable SKUs that use this value will be deleted permanently. This cannot be undone.`,
     );
 
+    const destroyVariantOptionById = async (optionId, label) => {
+        if (!destroyUrlTemplate || !optionId) {
+            return false;
+        }
+
+        if (!confirmRemoveVariantOption(label)) {
+            return false;
+        }
+
+        const formData = new FormData();
+        formData.append('_token', csrf);
+        formData.append('_method', 'DELETE');
+
+        const response = await fetch(buildDestroyUrl(optionId), {
+            method: 'POST',
+            body: formData,
+            headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+            const firstError = Object.values(data.errors || {}).flat()[0];
+            throw new Error(firstError || data.message || 'Could not remove value.');
+        }
+
+        removeOptionEverywhere(optionId);
+        showToast(data.message || 'Variant value removed.');
+
+        return true;
+    };
+
     const buildPersistedChip = (option, sellable, isNew = true) => {
         const chip = document.createElement('span');
         const missing = Number(sellable?.missing) || 0;
@@ -6435,7 +6465,7 @@ const initVariantModelChips = (root, csrf, showToast) => {
         if (labelList.length) persistLabels(field, labelList);
     };
 
-    const runCreateSellableSkus = async (optionIds, mainOptionIds = [], subOptionIds = []) => {
+    const runCreateSellableSkus = async (optionIds, mainOptionIds = [], subOptionIds = [], comboSignatures = null) => {
         if (!createNewSkusUrl || !optionIds.length) return;
 
         let scopedMainOptionIds = (mainOptionIds || []).map(Number).filter((id) => id > 0);
@@ -6498,6 +6528,11 @@ const initVariantModelChips = (root, csrf, showToast) => {
         optionIds.forEach((id, index) => formData.append(`option_ids[${index}]`, String(id)));
         scopedMainOptionIds.forEach((id, index) => formData.append(`main_option_ids[${index}]`, String(id)));
         scopedSubOptionIds.forEach((id, index) => formData.append(`sub_option_ids[${index}]`, String(id)));
+        if (comboSignatures !== null) {
+            comboSignatures.forEach((signature, index) => {
+                formData.append(`combo_signatures[${index}]`, String(signature));
+            });
+        }
 
         try {
             const response = await fetch(createNewSkusUrl, {
@@ -6577,25 +6612,38 @@ const initVariantModelChips = (root, csrf, showToast) => {
         return data;
     };
 
-    const mergePreviewPayloads = (payloads) => {
+    const mergePreviewPayloads = (payloads, batches) => {
         const first = payloads[0] || {};
+        const toCreate = [];
+        const pendingValueMap = new Map();
+
+        payloads.forEach((payload, batchIndex) => {
+            (payload.pending_values || []).forEach((value) => {
+                pendingValueMap.set(Number(value.id), value);
+            });
+            (payload.to_create || []).forEach((row) => {
+                toCreate.push({ ...row, batch_index: batchIndex });
+            });
+        });
 
         return {
             family_display_name: first.family_display_name || '',
             family_price_label: first.family_price_label || '',
             retail_price: first.retail_price ?? null,
-            to_create: payloads.flatMap((payload) => payload.to_create || []),
+            to_create: toCreate,
+            pending_values: [...pendingValueMap.values()],
             already_exist: payloads.flatMap((payload) => payload.already_exist || []),
-            create_count: payloads.reduce((sum, payload) => sum + (Number(payload.create_count) || 0), 0),
+            create_count: toCreate.length,
             skipped_existing: payloads.reduce((sum, payload) => sum + (Number(payload.skipped_existing) || 0), 0),
+            batches,
         };
     };
 
-    const showSellableCreateReview = (preview, onConfirm) => {
+    const showSellableCreateReview = (preview, batches) => {
         closeSellableCreateReview();
 
-        const createCount = Number(preview.create_count) || 0;
-        if (createCount <= 0) {
+        const rows = preview.to_create || [];
+        if (!rows.length) {
             const skipped = Number(preview.skipped_existing) || 0;
             showToast(
                 skipped > 0
@@ -6619,10 +6667,6 @@ const initVariantModelChips = (root, csrf, showToast) => {
         const title = document.createElement('h2');
         title.id = 'rfm-sku-create-preview-title';
         title.className = 'rfm-sku-create-preview-title';
-        title.textContent = createCount === 1
-            ? '1 sellable product ready'
-            : `${createCount} sellable products ready`;
-        panel.append(title);
 
         const meta = document.createElement('div');
         meta.className = 'rfm-sku-create-preview-meta';
@@ -6630,14 +6674,47 @@ const initVariantModelChips = (root, csrf, showToast) => {
         familyLine.innerHTML = `<strong>Family</strong> ${preview.family_display_name || '—'}`;
         const priceLine = document.createElement('p');
         priceLine.innerHTML = `<strong>Price</strong> ${preview.family_price_label || '—'}`;
-        meta.append(familyLine, priceLine);
-        panel.append(meta);
+        const hintLine = document.createElement('p');
+        hintLine.className = 'rfm-sku-create-preview-hint';
+        hintLine.textContent = 'Turn off any SKU you do not want. Delete variant values permanently if you added them by mistake.';
+        meta.append(familyLine, priceLine, hintLine);
 
         const list = document.createElement('ul');
         list.className = 'rfm-sku-create-preview-list';
-        (preview.to_create || []).forEach((row) => {
+
+        const removePreviewRowsForOption = (optionId) => {
+            const id = Number(optionId);
+            list.querySelectorAll('[data-rfm-sku-preview-row]').forEach((item) => {
+                const newIds = (item.dataset.newOptionIds || '').split(/\s+/).map(Number).filter(Boolean);
+                if (newIds.includes(id)) {
+                    item.remove();
+                }
+            });
+            panel.querySelectorAll(`[data-rfm-preview-pending-value="${id}"]`)?.forEach((row) => row.remove());
+            syncReviewUi();
+            if (!list.querySelector('[data-rfm-sku-preview-row]')) {
+                closeSellableCreateReview();
+                updateCreateBar();
+            }
+        };
+
+        rows.forEach((row) => {
             const item = document.createElement('li');
-            item.className = 'rfm-sku-create-preview-item';
+            item.className = 'rfm-sku-create-preview-item is-included';
+            item.dataset.rfmSkuPreviewRow = '';
+            item.dataset.variantSignature = row.variant_signature || '';
+            item.dataset.batchIndex = String(row.batch_index ?? 0);
+            item.dataset.newOptionIds = (row.new_option_ids || []).join(' ');
+
+            const toggle = document.createElement('button');
+            toggle.type = 'button';
+            toggle.className = 'rfm-sku-create-preview-toggle';
+            toggle.setAttribute('aria-pressed', 'true');
+            toggle.setAttribute('aria-label', 'Include this sellable in create');
+            toggle.title = 'Include in create';
+
+            const body = document.createElement('div');
+            body.className = 'rfm-sku-create-preview-item-body';
 
             const name = document.createElement('span');
             name.className = 'rfm-sku-create-preview-name';
@@ -6656,17 +6733,69 @@ const initVariantModelChips = (root, csrf, showToast) => {
                 price.classList.add('is-missing');
             }
 
-            item.append(name, variants, price);
+            body.append(name, variants, price);
+            item.append(toggle, body);
             list.append(item);
+
+            toggle.addEventListener('click', () => {
+                const included = !item.classList.contains('is-included');
+                item.classList.toggle('is-included', included);
+                toggle.setAttribute('aria-pressed', included ? 'true' : 'false');
+                syncReviewUi();
+            });
         });
-        panel.append(list);
 
         const alreadyExist = preview.already_exist || [];
+        let skipNote = null;
         if (alreadyExist.length > 0) {
-            const skipNote = document.createElement('p');
+            skipNote = document.createElement('p');
             skipNote.className = 'rfm-sku-create-preview-skip';
             skipNote.textContent = `${alreadyExist.length} combination${alreadyExist.length === 1 ? '' : 's'} already exist and will be skipped.`;
-            panel.append(skipNote);
+        }
+
+        const discard = document.createElement('div');
+        discard.className = 'rfm-sku-create-preview-discard';
+        const discardTitle = document.createElement('p');
+        discardTitle.className = 'rfm-sku-create-preview-discard-title';
+        discardTitle.textContent = 'Remove variant values permanently';
+        const discardHint = document.createElement('p');
+        discardHint.className = 'rfm-sku-create-preview-discard-hint';
+        discardHint.textContent = 'Deletes the value from this family. Any sellable SKUs using it are removed.';
+        discard.append(discardTitle, discardHint);
+
+        const discardList = document.createElement('ul');
+        discardList.className = 'rfm-sku-create-preview-discard-list';
+        (preview.pending_values || []).forEach((value) => {
+            const row = document.createElement('li');
+            row.className = 'rfm-sku-create-preview-discard-row';
+            row.dataset.rfmPreviewPendingValue = String(value.id);
+
+            const label = document.createElement('span');
+            label.className = 'rfm-sku-create-preview-discard-label';
+            label.textContent = `${value.group_name}: ${value.label}`;
+
+            const deleteBtn = document.createElement('button');
+            deleteBtn.type = 'button';
+            deleteBtn.className = 'rfm-sku-create-preview-discard-btn';
+            deleteBtn.textContent = 'Delete';
+            deleteBtn.addEventListener('click', async () => {
+                deleteBtn.disabled = true;
+                try {
+                    const removed = await destroyVariantOptionById(value.id, value.label);
+                    if (removed) {
+                        removePreviewRowsForOption(value.id);
+                    }
+                } catch (err) {
+                    showToast(err.message || 'Could not remove value.', true);
+                    deleteBtn.disabled = false;
+                }
+            });
+
+            row.append(label, deleteBtn);
+            discardList.append(row);
+        });
+        if (discardList.children.length) {
+            discard.append(discardList);
         }
 
         const actions = document.createElement('div');
@@ -6680,14 +6809,35 @@ const initVariantModelChips = (root, csrf, showToast) => {
         const agreeBtn = document.createElement('button');
         agreeBtn.type = 'button';
         agreeBtn.className = 'rfm-sku-create-preview-agree';
-        agreeBtn.textContent = createCount === 1
-            ? 'Create 1 sellable'
-            : `Create ${createCount} sellables`;
 
+        const syncReviewUi = () => {
+            const items = [...list.querySelectorAll('[data-rfm-sku-preview-row]')];
+            const selected = items.filter((item) => item.classList.contains('is-included'));
+            const total = items.length;
+            title.textContent = total === 1
+                ? '1 sellable product ready'
+                : `${total} sellable product${total === 1 ? '' : 's'} ready`;
+            agreeBtn.textContent = selected.length === 1
+                ? 'Create 1 sellable'
+                : `Create ${selected.length} sellable${selected.length === 1 ? '' : 's'}`;
+            agreeBtn.disabled = selected.length === 0;
+            hintLine.textContent = selected.length === total
+                ? 'Turn off any SKU you do not want. Delete variant values permanently if you added them by mistake.'
+                : `${total - selected.length} skipped · ${selected.length} will be created.`;
+        };
+
+        panel.append(title, meta, list);
+        if (skipNote) {
+            panel.append(skipNote);
+        }
+        if (discardList.children.length) {
+            panel.append(discard);
+        }
         actions.append(cancelBtn, agreeBtn);
         panel.append(actions);
         backdrop.append(panel);
         document.body.appendChild(backdrop);
+        syncReviewUi();
 
         const onKeydown = (event) => {
             if (event.key === 'Escape') {
@@ -6703,11 +6853,35 @@ const initVariantModelChips = (root, csrf, showToast) => {
             }
         });
         agreeBtn.addEventListener('click', async () => {
+            const selectedByBatch = new Map();
+            list.querySelectorAll('[data-rfm-sku-preview-row].is-included').forEach((item) => {
+                const batchIndex = Number(item.dataset.batchIndex) || 0;
+                const signature = item.dataset.variantSignature || '';
+                if (!signature) {
+                    return;
+                }
+                if (!selectedByBatch.has(batchIndex)) {
+                    selectedByBatch.set(batchIndex, []);
+                }
+                selectedByBatch.get(batchIndex).push(signature);
+            });
+
             agreeBtn.disabled = true;
             agreeBtn.classList.add('is-busy');
             cancelBtn.disabled = true;
             try {
-                await onConfirm();
+                for (const [batchIndex, signatures] of selectedByBatch.entries()) {
+                    const batch = batches[batchIndex];
+                    if (!batch) {
+                        continue;
+                    }
+                    await runCreateSellableSkus(
+                        batch.optionIds,
+                        batch.mainOptionIds || [],
+                        batch.subOptionIds || [],
+                        signatures,
+                    );
+                }
                 closeSellableCreateReview();
             } catch (err) {
                 showToast(err.message || 'Could not create sellable products.', true);
@@ -6715,6 +6889,7 @@ const initVariantModelChips = (root, csrf, showToast) => {
                 agreeBtn.disabled = false;
                 agreeBtn.classList.remove('is-busy');
                 cancelBtn.disabled = false;
+                syncReviewUi();
             }
         });
 
@@ -6741,17 +6916,9 @@ const initVariantModelChips = (root, csrf, showToast) => {
 
         try {
             const payloads = await Promise.all(normalized.map((batch) => fetchCreatePreview(batch)));
-            const preview = mergePreviewPayloads(payloads);
+            const preview = mergePreviewPayloads(payloads, normalized);
 
-            showSellableCreateReview(preview, async () => {
-                for (const batch of normalized) {
-                    await runCreateSellableSkus(
-                        batch.optionIds,
-                        batch.mainOptionIds || [],
-                        batch.subOptionIds || [],
-                    );
-                }
-            });
+            showSellableCreateReview(preview, normalized);
         } catch (err) {
             showToast(err.message || 'Could not load preview.', true);
         }
@@ -7185,29 +7352,11 @@ const initVariantModelChips = (root, csrf, showToast) => {
         const label = chip?.dataset.chipLabel || chip?.querySelector('.rfm-vchip-label')?.textContent || 'this value';
         if (!optionId || !destroyUrlTemplate) return;
 
-        if (!confirmRemoveVariantOption(label)) return;
-
         btn.disabled = true;
         chip.classList.add('is-saving');
 
-        const formData = new FormData();
-        formData.append('_token', csrf);
-        formData.append('_method', 'DELETE');
-
         try {
-            const response = await fetch(buildDestroyUrl(optionId), {
-                method: 'POST',
-                body: formData,
-                headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
-            });
-            const data = await response.json().catch(() => ({}));
-            if (!response.ok) {
-                const firstError = Object.values(data.errors || {}).flat()[0];
-                throw new Error(firstError || data.message || 'Could not remove value.');
-            }
-
-            removeOptionEverywhere(optionId);
-            showToast(data.message || 'Variant value removed.');
+            await destroyVariantOptionById(optionId, label);
         } catch (err) {
             chip.classList.remove('is-saving');
             btn.disabled = false;
