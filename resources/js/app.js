@@ -6157,15 +6157,20 @@ const initVariantModelChips = (root, csrf, showToast) => {
 
             savingChips.forEach((chip) => chip.remove());
 
+            const newOptions = [];
             (data.created || []).forEach((row) => {
                 const option = row.option;
                 const sellable = row.sellable;
                 if (!option) return;
                 box.insertBefore(buildPersistedChip(option, sellable, true), input);
                 ensureOptionInSelects(groupId, option);
+                newOptions.push(option);
             });
 
             updateCreateBar();
+
+            // Ask the placement question (which main / which subs) right away, then create.
+            if (newOptions.length) promptPlacementAndCreate(field, newOptions);
         } catch (err) {
             savingChips.forEach((chip) => chip.remove());
             showToast(err.message || 'Could not save values.', true);
@@ -6270,12 +6275,10 @@ const initVariantModelChips = (root, csrf, showToast) => {
     // a SKU for a new value is ambiguous, so we ask the COMPLEMENTARY-axis question:
     //   mode 'sub'  (new Colour) -> "under which Length(s)?"  -> sends main_option_ids
     //   mode 'main' (new Length) -> "which Colour(s) under it?" -> sends sub_option_ids
-    const showPlacementPicker = (chip, optionId, mode) => {
+    // Fired right when a value is added (comma/Enter), so placement is decided
+    // BEFORE the SKUs are created.
+    const showPlacementPicker = ({ optionIds, mode, anchorEl, label, covered = [] }) => {
         closeLengthPicker();
-
-        const label = chip.dataset.chipLabel
-            || chip.querySelector('.rfm-vchip-label')?.textContent?.trim()
-            || 'value';
 
         const isSub = mode === 'sub';
         const options = isSub ? mainAxisOptions : subAxisOptions;
@@ -6283,16 +6286,6 @@ const initVariantModelChips = (root, csrf, showToast) => {
         const titleText = isSub
             ? `Create “${label}” for which ${axisName}?`
             : `Which ${axisName} go under “${label}”?`;
-
-        // For the sub->main direction, pre-check only the mains this colour is missing.
-        let covered = [];
-        if (isSub) {
-            try {
-                covered = JSON.parse(chip.dataset.rfmCoveredMains || '[]').map(Number);
-            } catch (e) {
-                covered = [];
-            }
-        }
 
         const backdrop = document.createElement('div');
         backdrop.className = 'rfm-length-picker-backdrop';
@@ -6344,7 +6337,7 @@ const initVariantModelChips = (root, csrf, showToast) => {
         backdrop.appendChild(pop);
         document.body.appendChild(backdrop);
 
-        const rect = chip.getBoundingClientRect();
+        const rect = (anchorEl || document.body).getBoundingClientRect();
         pop.style.top = `${Math.min(window.innerHeight - 220, rect.bottom + 6)}px`;
         pop.style.left = `${Math.max(12, Math.min(window.innerWidth - 300, rect.left))}px`;
 
@@ -6357,11 +6350,29 @@ const initVariantModelChips = (root, csrf, showToast) => {
             closeLengthPicker();
             if (!chosen.length) return;
             if (isSub) {
-                await runCreateSellableSkus([optionId], chosen, []);
+                await runCreateSellableSkus(optionIds, chosen, []);
             } else {
-                await runCreateSellableSkus([optionId], [], chosen);
+                await runCreateSellableSkus(optionIds, [], chosen);
             }
         });
+    };
+
+    // Decide placement right after value(s) are added (comma/Enter), then create.
+    const promptPlacementAndCreate = (field, newOptions) => {
+        const optionIds = newOptions.map((o) => Number(o.id)).filter((id) => id > 0);
+        if (!optionIds.length) return;
+        const role = field?.dataset.groupRole || '';
+        const label = newOptions.map((o) => o.label).filter(Boolean).join(', ') || 'value';
+        const anchorEl = field?.querySelector('[data-rfm-variant-chip-input]') || field;
+
+        if (role === 'sub_main' && mainAxisOptions.length >= 2) {
+            showPlacementPicker({ optionIds, mode: 'sub', anchorEl, label, covered: [] });
+        } else if (role === 'main' && subAxisOptions.length >= 2) {
+            showPlacementPicker({ optionIds, mode: 'main', anchorEl, label, covered: [] });
+        } else {
+            // No ambiguity (single complementary value) — just create.
+            runCreateSellableSkus(optionIds);
+        }
     };
 
     if (createBtn && createNewSkusUrl) {
@@ -6424,13 +6435,22 @@ const initVariantModelChips = (root, csrf, showToast) => {
 
             const field = pendingChip.closest('[data-rfm-variant-chip-field]');
             const role = field?.dataset.groupRole || '';
+            const chipLabel = pendingChip.dataset.chipLabel
+                || pendingChip.querySelector('.rfm-vchip-label')?.textContent?.trim()
+                || 'value';
 
             // Sub-main value (e.g. Colour) + multiple mains -> ask "under which main(s)?"
             if (role === 'sub_main' && mainAxisOptions.length >= 2) {
-                showPlacementPicker(pendingChip, optionId, 'sub');
+                let covered = [];
+                try {
+                    covered = JSON.parse(pendingChip.dataset.rfmCoveredMains || '[]').map(Number);
+                } catch (e) {
+                    covered = [];
+                }
+                showPlacementPicker({ optionIds: [optionId], mode: 'sub', anchorEl: pendingChip, label: chipLabel, covered });
             // Main value (e.g. a new Length) -> ask "which sub-mains go under it?"
             } else if (role === 'main' && subAxisOptions.length >= 2) {
-                showPlacementPicker(pendingChip, optionId, 'main');
+                showPlacementPicker({ optionIds: [optionId], mode: 'main', anchorEl: pendingChip, label: chipLabel, covered: [] });
             } else {
                 await runCreateSellableSkus([optionId]);
             }
