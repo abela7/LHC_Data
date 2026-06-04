@@ -534,7 +534,7 @@ class RetailProductController extends Controller
 
             if ($family->products->isEmpty()) {
                 return response()->json([
-                    'message' => 'Add at least one sellable SKU manually first, then new variant values can copy its length, pack and other axes.',
+                    'message' => 'Add at least one sellable SKU manually first (main + common variants set), then new sub-variant values can extend it.',
                 ], 422);
             }
 
@@ -596,12 +596,12 @@ class RetailProductController extends Controller
             $exampleCount = count($existingExamples);
             $message = match (true) {
                 $createdCount === 0 && $skippedExisting > 0 => $exampleCount > 0
-                    ? "Sellable products for {$newOptionLabels} already exist ({$exampleCount} example".($exampleCount === 1 ? '' : 's')." listed below — check Colour in the variant breakdown, not only the product name)."
-                    : "Sellable products for {$newOptionLabels} already exist on this family — expand each group in the SKU list or search for the colour label.",
+                    ? "Sellable products for {$newOptionLabels} already exist ({$exampleCount} example".($exampleCount === 1 ? '' : 's')." listed below). Check the variant breakdown (e.g. Pack: Grey vs Colour: Grey) — the name alone often hides which axis is Grey."
+                    : "Sellable products for {$newOptionLabels} already exist on this family — expand each group in the SKU list or search for the value label.",
                 $createdCount === 1 => "Created 1 sellable SKU ({$createdProducts[0]['name']}).",
                 $createdCount > 1 => "Created {$createdCount} sellable SKUs for {$newOptionLabels}.",
                 $createdCount === 0 && $skippedConflict > 0 => 'No sellables created — catalogue SKU already linked elsewhere.',
-                default => 'No sellable products were created. Add a complete sellable (length + pack + colour) first, then try again.',
+                default => 'No sellable products were created. Add one complete sellable with main and common variants set, then try again.',
             };
 
             if ($skippedExisting > 0 && $createdCount > 0) {

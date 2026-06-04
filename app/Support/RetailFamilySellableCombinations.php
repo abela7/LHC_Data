@@ -11,7 +11,8 @@ use Illuminate\Support\Collection;
 
 /**
  * Builds sellable SKU variant combinations when new values are added on a family.
- * Uses existing products as templates (main + common axes) and swaps in each new value.
+ * Respects main / common / sub axes: new sub values (e.g. Colour Grey) pair with
+ * pinned common variants (Bundle 3x, Pack 3X) and each distinct main value (e.g. 20").
  */
 final class RetailFamilySellableCombinations
 {
@@ -71,11 +72,21 @@ final class RetailFamilySellableCombinations
      */
     public static function forNewVariantOptions(ProductFamily $family, Collection $newOptionIds): array
     {
-        $family->loadMissing([
-            'variantGroups.options',
-            'products.variantValues.option',
-            'products.variantValues.group',
-        ]);
+        if (! $family->relationLoaded('variantGroups')) {
+            $family->loadMissing(['variantGroups.options']);
+        } else {
+            foreach ($family->variantGroups as $group) {
+                if (! $group->relationLoaded('options')) {
+                    $group->loadMissing('options');
+                }
+            }
+        }
+
+        $family->products->each(function (Product $product): void {
+            if (! $product->relationLoaded('variantValues')) {
+                $product->loadMissing(['variantValues.option', 'variantValues.group']);
+            }
+        });
 
         $newOptionIds = $newOptionIds
             ->map(fn (mixed $id): int => (int) $id)
@@ -87,10 +98,17 @@ final class RetailFamilySellableCombinations
             return [];
         }
 
-        $newOptions = ProductVariantOption::query()
+        $newOptions = $family->variantGroups
+            ->flatMap(fn ($group) => $group->options)
             ->whereIn('id', $newOptionIds->all())
-            ->whereIn('product_variant_group_id', $family->variantGroups->pluck('id'))
-            ->get();
+            ->values();
+
+        if ($newOptions->isEmpty()) {
+            $newOptions = ProductVariantOption::query()
+                ->whereIn('id', $newOptionIds->all())
+                ->whereIn('product_variant_group_id', $family->variantGroups->pluck('id'))
+                ->get();
+        }
 
         if ($newOptions->isEmpty()) {
             return [];
@@ -100,6 +118,8 @@ final class RetailFamilySellableCombinations
             return self::cartesianIncludingAnyOption($family, $newOptionIds);
         }
 
+        $products = $family->products;
+        $axes = RetailFamilyVariantAxes::forFamily($family, $products);
         $combos = [];
         $seen = [];
 
@@ -113,13 +133,7 @@ final class RetailFamilySellableCombinations
 
             $newOption->setRelation('group', $targetGroup);
 
-            foreach ($family->products as $product) {
-                $combo = self::comboFromProductTemplate($family, $product, $targetGroupId, $newOption);
-
-                if ($combo === null) {
-                    continue;
-                }
-
+            foreach (self::combosForNewOption($family, $products, $axes, $newOption) as $combo) {
                 $signature = self::variantSignature($family, collect($combo));
 
                 if (isset($seen[$signature])) {
@@ -135,64 +149,204 @@ final class RetailFamilySellableCombinations
     }
 
     /**
-     * @return list<ProductVariantOption>|null
+     * @return list<list<ProductVariantOption>>
      */
-    private static function comboFromProductTemplate(
+    private static function combosForNewOption(
         ProductFamily $family,
-        Product $product,
-        int $targetGroupId,
+        Collection $products,
+        RetailFamilyVariantAxes $axes,
         ProductVariantOption $newOption,
-    ): ?array {
-        $optionByGroup = [];
+    ): array {
+        $targetGroupId = (int) $newOption->product_variant_group_id;
 
-        foreach ($product->variantValues as $value) {
-            if (! $value->option) {
+        if ($axes->isMainGroup($targetGroupId)) {
+            return self::combosForNewMainOption($family, $products, $axes, $newOption);
+        }
+
+        if ($axes->isCommonGroup($targetGroupId)) {
+            return self::combosForNewCommonOption($family, $products, $axes, $newOption);
+        }
+
+        return self::combosForNewSubOption($family, $products, $axes, $newOption);
+    }
+
+    /**
+     * New sub variant (e.g. Colour Grey): one sellable per main value, common axes pinned.
+     *
+     * @return list<list<ProductVariantOption>>
+     */
+    private static function combosForNewSubOption(
+        ProductFamily $family,
+        Collection $products,
+        RetailFamilyVariantAxes $axes,
+        ProductVariantOption $newOption,
+    ): array {
+        $targetGroupId = (int) $newOption->product_variant_group_id;
+        $pinnedCommon = $axes->pinnedCommonOptions($family, $products, $newOption);
+        $references = $axes->referenceProducts($products, $pinnedCommon);
+        $mainRows = $axes->distinctMainOptionSets($family, $references, $pinnedCommon);
+
+        if ($mainRows === []) {
+            $mainRows = [self::inferSubRowFromReferences($family, $axes, $references, $targetGroupId)];
+        }
+
+        $combos = [];
+
+        foreach ($mainRows as $row) {
+            $combo = $axes->assembleCombo($family, $newOption, $targetGroupId, $pinnedCommon, $row);
+
+            if ($combo !== null) {
+                $combos[] = $combo;
+            }
+        }
+
+        return $combos;
+    }
+
+    /**
+     * @return list<list<ProductVariantOption>>
+     */
+    private static function combosForNewMainOption(
+        ProductFamily $family,
+        Collection $products,
+        RetailFamilyVariantAxes $axes,
+        ProductVariantOption $newOption,
+    ): array {
+        $targetGroupId = (int) $newOption->product_variant_group_id;
+        $pinnedCommon = $axes->pinnedCommonOptions($family, $products, $newOption);
+        $references = $axes->referenceProducts($products, $pinnedCommon);
+        $seen = [];
+        $combos = [];
+
+        foreach ($references as $product) {
+            $row = self::inferSubRowFromReferences($family, $axes, collect([$product]), $targetGroupId);
+            $combo = $axes->assembleCombo($family, $newOption, $targetGroupId, $pinnedCommon, $row);
+
+            if ($combo === null) {
                 continue;
             }
 
-            $optionByGroup[(int) $value->product_variant_group_id] = $value->option;
+            $signature = self::variantSignature($family, collect($combo));
+
+            if (isset($seen[$signature])) {
+                continue;
+            }
+
+            $seen[$signature] = true;
+            $combos[] = $combo;
         }
 
-        $combo = [];
+        if ($combos === [] && $pinnedCommon !== []) {
+            $combo = $axes->assembleCombo($family, $newOption, $targetGroupId, $pinnedCommon, []);
+
+            if ($combo !== null) {
+                $combos[] = $combo;
+            }
+        }
+
+        return $combos;
+    }
+
+    /**
+     * @return list<list<ProductVariantOption>>
+     */
+    private static function combosForNewCommonOption(
+        ProductFamily $family,
+        Collection $products,
+        RetailFamilyVariantAxes $axes,
+        ProductVariantOption $newOption,
+    ): array {
+        $targetGroupId = (int) $newOption->product_variant_group_id;
+        $pinnedCommon = $axes->pinnedCommonOptions($family, $products, $newOption);
+        unset($pinnedCommon[$targetGroupId]);
+        $pinnedCommon[$targetGroupId] = $newOption;
+
+        $references = $axes->referenceProducts($products, $pinnedCommon);
+        $seen = [];
+        $combos = [];
+
+        foreach ($references as $product) {
+            $row = self::inferSubRowFromReferences($family, $axes, collect([$product]), $targetGroupId);
+
+            if ($axes->mainGroup !== null) {
+                $mainOption = $product->variantValues
+                    ->firstWhere('product_variant_group_id', $axes->mainGroup->id)
+                    ?->option;
+
+                if ($mainOption instanceof ProductVariantOption) {
+                    $row[(int) $axes->mainGroup->id] = $mainOption;
+                }
+            }
+
+            $combo = $axes->assembleCombo($family, $newOption, $targetGroupId, $pinnedCommon, $row);
+
+            if ($combo === null) {
+                continue;
+            }
+
+            $signature = self::variantSignature($family, collect($combo));
+
+            if (isset($seen[$signature])) {
+                continue;
+            }
+
+            $seen[$signature] = true;
+            $combos[] = $combo;
+        }
+
+        if ($combos === []) {
+            $combo = $axes->assembleCombo($family, $newOption, $targetGroupId, $pinnedCommon, []);
+
+            if ($combo !== null) {
+                $combos[] = $combo;
+            }
+        }
+
+        return $combos;
+    }
+
+    /**
+     * When the family has no main axis on reference SKUs, keep other sub-axis values
+     * from a representative product (excluding the target sub being created).
+     *
+     * @return array<int, ProductVariantOption>
+     */
+    private static function inferSubRowFromReferences(
+        ProductFamily $family,
+        RetailFamilyVariantAxes $axes,
+        Collection $references,
+        int $targetGroupId,
+    ): array {
+        $product = $references->first();
+
+        if (! $product instanceof Product) {
+            return [];
+        }
+
+        $row = [];
 
         foreach ($family->variantGroups as $group) {
             $groupId = (int) $group->id;
 
-            if ($groupId === $targetGroupId) {
-                $combo[] = $newOption;
-
+            if ($groupId === $targetGroupId || $axes->isCommonGroup($groupId) || $axes->isMainGroup($groupId)) {
                 continue;
             }
 
-            $picked = $optionByGroup[$groupId] ?? self::familyWideSingleOption($family, $groupId);
-
-            if (! $picked instanceof ProductVariantOption) {
-                return null;
+            if (! $axes->isSubGroup($groupId)) {
+                continue;
             }
 
-            $picked->setRelation('group', $group);
-            $combo[] = $picked;
+            $option = $product->variantValues
+                ->firstWhere('product_variant_group_id', $groupId)
+                ?->option;
+
+            if ($option instanceof ProductVariantOption) {
+                $option->setRelation('group', $group);
+                $row[$groupId] = $option;
+            }
         }
 
-        return count($combo) === $family->variantGroups->count() ? $combo : null;
-    }
-
-    private static function familyWideSingleOption(ProductFamily $family, int $groupId): ?ProductVariantOption
-    {
-        $optionIds = $family->products
-            ->flatMap(fn (Product $product) => $product->variantValues)
-            ->where('product_variant_group_id', $groupId)
-            ->pluck('product_variant_option_id')
-            ->map(fn (mixed $id): int => (int) $id)
-            ->filter(fn (int $id): bool => $id > 0)
-            ->unique()
-            ->values();
-
-        if ($optionIds->count() !== 1) {
-            return null;
-        }
-
-        return ProductVariantOption::query()->find($optionIds->first());
+        return $row;
     }
 
     /**
