@@ -16,23 +16,28 @@ use App\Support\RetailStyleFamilyCatalogue;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
-use Illuminate\Support\Str;
 
 /**
  * Collapse the per-length "style split" families of one catalogue style into a
  * SINGLE family that carries Length as a real MAIN variant axis.
  *
  * Today each length is its own ProductFamily (catalogue_scope_key = split-...-20,
- * shown as the "THIS STYLE: Main / 16" / 20"" tabs). This merges them so you get
- * one family with: Length (main) x Colour (sub-main), Pack/Bundle (common).
+ * shown as the "THIS STYLE: Main / 16" / 20"" tabs). This merges them into one
+ * family: Length (main) x Colour (sub-main), Pack/Bundle (common).
  *
- *   php artisan retail:merge-length-families 12110                 # DRY RUN (default)
- *   php artisan retail:merge-length-families 12110 --main-length=20"  # how to label the NULL-scope "Main" family's SKUs
- *   php artisan retail:merge-length-families 12110 --drop-empty-main  # delete the "Main" family's SKUs instead
- *   php artisan retail:merge-length-families 12110 --main-length=20" --execute   # actually do it
+ * It is robust to messy source families:
+ *   - a SKU's length is read from its own Length group when it has one, else
+ *     from the family scope (or --main-length for an unlabelled NULL family);
+ *   - a source family's own Length group is folded into the one main Length axis
+ *     (no duplicate Length group);
+ *   - redundant pack/count axes (e.g. a stray "Pack" next to "Bundle") are
+ *     dropped rather than re-created on the target.
  *
- * Safe by default: without --execute it only prints the plan (and the otherwise
- * invisible "Main" SKUs) and changes nothing.
+ *   php artisan retail:merge-length-families 12110            # DRY RUN (default)
+ *   php artisan retail:merge-length-families 12110 --execute  # perform it
+ *
+ * Safe by default: without --execute it prints the plan (and the otherwise
+ * invisible NULL-family SKUs) and changes nothing.
  */
 class MergeLengthFamiliesCommand extends Command
 {
@@ -40,8 +45,8 @@ class MergeLengthFamiliesCommand extends Command
         {family : a ProductFamily id on the catalogue style to merge}
         {--target= : family id to KEEP as the merged family (default: the one with most SKUs)}
         {--length-group=Length : name for the Length variant group}
-        {--main-length= : length label to assign to the NULL-scope "Main" family SKUs (e.g. 20")}
-        {--drop-empty-main : delete the NULL-scope "Main" family SKUs instead of giving them a length}
+        {--main-length= : length to assign to a NULL-scope family whose SKUs have no length of their own (e.g. 20")}
+        {--drop-empty-main : delete a NULL-scope family SKUs that have no resolvable length}
         {--execute : perform the merge (default is a dry run that changes nothing)}';
 
     protected $description = 'Merge per-length sibling families into one family with Length as the main variant axis.';
@@ -77,7 +82,6 @@ class MergeLengthFamiliesCommand extends Command
             return self::SUCCESS;
         }
 
-        // Target = family we keep. Default: most SKUs.
         $targetId = (int) ($this->option('target') ?: $families->first()->id);
         $target = $families->firstWhere('id', $targetId);
         if (! $target) {
@@ -86,39 +90,26 @@ class MergeLengthFamiliesCommand extends Command
             return self::FAILURE;
         }
 
-        // Resolve a length label for every family (null = unresolved -> needs a flag).
         $mainLength = $this->normalizeLength((string) ($this->option('main-length') ?? ''));
         $dropMain = (bool) $this->option('drop-empty-main');
-        $lengthFor = [];
+
+        // Resolve how each family contributes its length.
+        $plan = [];
         $unresolved = [];
-
         foreach ($families as $family) {
-            if (filled($family->catalogue_scope_key)) {
-                $lengthFor[$family->id] = $this->normalizeLength(
-                    RetailStyleFamilyCatalogue::scopeLabel($family->catalogue_scope_key)
-                );
-
-                continue;
-            }
-
-            // NULL-scope "Main" family.
-            if ($dropMain) {
-                $lengthFor[$family->id] = self::DROP;
-            } elseif ($mainLength !== '') {
-                $lengthFor[$family->id] = $mainLength;
-            } else {
-                $lengthFor[$family->id] = null;
+            $plan[$family->id] = $this->resolveFamilyLength($family, $mainLength, $dropMain);
+            if ($plan[$family->id]['mode'] === 'unresolved') {
                 $unresolved[] = $family;
             }
         }
 
-        $this->printPlan($families, $target, $lengthFor);
+        $this->printPlan($families, $target, $plan);
 
         if ($unresolved !== []) {
             $this->newLine();
-            $this->warn('The NULL-scope "Main" family needs a decision. Re-run with ONE of:');
-            $this->line('   --main-length=20"     (give its SKUs a length)');
-            $this->line('   --drop-empty-main     (delete its SKUs)');
+            $this->warn('One family has SKUs with no resolvable length. Re-run with ONE of:');
+            $this->line('   --main-length=20"     (give those SKUs a length)');
+            $this->line('   --drop-empty-main     (delete those SKUs)');
 
             return self::FAILURE;
         }
@@ -130,7 +121,7 @@ class MergeLengthFamiliesCommand extends Command
             return self::SUCCESS;
         }
 
-        DB::transaction(fn () => $this->merge($families, $target, $lengthFor));
+        DB::transaction(fn () => $this->merge($families, $target, $plan));
 
         $this->newLine();
         $this->info("Merged into family #{$target->id}. Reload the page — Length is now the main axis.");
@@ -139,28 +130,79 @@ class MergeLengthFamiliesCommand extends Command
     }
 
     /**
-     * @param  \Illuminate\Support\Collection<int, ProductFamily>  $families
-     * @param  array<int, string|null>  $lengthFor
+     * @return array{mode: string, length: ?string, lengthGroupId: ?int}
      */
-    private function printPlan($families, ProductFamily $target, array $lengthFor): void
+    private function resolveFamilyLength(ProductFamily $family, string $mainLength, bool $dropMain): array
+    {
+        $sourceLengthGroup = $family->variantGroups->first(fn (ProductVariantGroup $g): bool => $this->isLengthGroup($g));
+
+        // A non-null scope already names the length (split-length-20 -> 20").
+        if (filled($family->catalogue_scope_key)) {
+            return [
+                'mode' => 'fixed',
+                'length' => $this->normalizeLength(RetailStyleFamilyCatalogue::scopeLabel($family->catalogue_scope_key)),
+                'lengthGroupId' => $sourceLengthGroup?->id,
+            ];
+        }
+
+        // NULL scope but the SKUs carry their own Length value -> read it per product.
+        if ($sourceLengthGroup && $this->everyProductHasLength($family, $sourceLengthGroup)) {
+            return ['mode' => 'per_product', 'length' => null, 'lengthGroupId' => (int) $sourceLengthGroup->id];
+        }
+
+        if ($dropMain) {
+            return ['mode' => 'drop', 'length' => null, 'lengthGroupId' => $sourceLengthGroup?->id];
+        }
+
+        if ($mainLength !== '') {
+            return ['mode' => 'fixed', 'length' => $mainLength, 'lengthGroupId' => $sourceLengthGroup?->id];
+        }
+
+        return ['mode' => 'unresolved', 'length' => null, 'lengthGroupId' => $sourceLengthGroup?->id];
+    }
+
+    private function everyProductHasLength(ProductFamily $family, ProductVariantGroup $lengthGroup): bool
+    {
+        if ($family->products->isEmpty()) {
+            return false;
+        }
+
+        return $family->products->every(function (Product $product) use ($lengthGroup): bool {
+            return $product->variantValues
+                ->firstWhere('product_variant_group_id', $lengthGroup->id) !== null;
+        });
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection<int, ProductFamily>  $families
+     * @param  array<int, array{mode: string, length: ?string, lengthGroupId: ?int}>  $plan
+     */
+    private function printPlan($families, ProductFamily $target, array $plan): void
     {
         $this->info("Catalogue style #{$target->brand_catalogue_style_id} — merge plan");
         $this->line("Target (kept): #{$target->id} \"{$target->family_name}\"");
         $this->newLine();
 
         foreach ($families as $family) {
-            $length = $lengthFor[$family->id];
+            $p = $plan[$family->id];
+            $lengthText = match ($p['mode']) {
+                'fixed' => $p['length'],
+                'per_product' => 'per SKU (own Length value)',
+                'drop' => 'DROP SKUs',
+                default => 'UNRESOLVED',
+            };
             $tag = $family->id === $target->id ? ' [TARGET]' : '';
-            $lengthText = $length === self::DROP ? 'DROP SKUs' : ($length ?? 'UNRESOLVED');
             $this->line("FAM #{$family->id} scope=".var_export($family->catalogue_scope_key, true)
                 ." length={$lengthText} skus={$family->products_count}{$tag}");
 
             foreach ($family->variantGroups as $group) {
-                $this->line("    grp {$group->name} [{$group->variant_type}]: "
+                $note = $this->isLengthGroup($group) ? ' (folded into main Length)'
+                    : ($this->isCountConcept($group) ? ' (count/pack)' : '');
+                $this->line("    grp {$group->name} [{$group->variant_type}]{$note}: "
                     .$group->options->pluck('label')->implode(', '));
             }
 
-            // Always reveal the NULL-scope family's SKUs — they are otherwise invisible.
+            // Reveal SKUs of any NULL-scope family — otherwise invisible.
             if (! filled($family->catalogue_scope_key)) {
                 foreach ($family->products as $product) {
                     $vv = $product->variantValues
@@ -172,45 +214,31 @@ class MergeLengthFamiliesCommand extends Command
             }
         }
 
-        $lengths = collect($lengthFor)->reject(fn ($l) => $l === null || $l === self::DROP)->unique()->values();
         $this->newLine();
-        $this->line('Length axis (MAIN) will hold: '.$lengths->implode(', '));
+        $this->line('Length axis (MAIN) will hold every distinct SKU length above.');
         $this->line('Roles after merge: Length=Main, count/pack axis=Common, others (Colour)=Sub-main.');
+        $this->line('Redundant Length/Pack groups on source families are folded/dropped — not duplicated.');
     }
 
     /**
      * @param  \Illuminate\Support\Collection<int, ProductFamily>  $families
-     * @param  array<int, string|null>  $lengthFor
+     * @param  array<int, array{mode: string, length: ?string, lengthGroupId: ?int}>  $plan
      */
-    private function merge($families, ProductFamily $target, array $lengthFor): void
+    private function merge($families, ProductFamily $target, array $plan): void
     {
         $lengthGroup = $this->ensureLengthGroup($target);
-
-        // Build a length option per distinct label.
+        $targetCountName = $this->countGroupName($target);
         $lengthOptions = [];
-        foreach ($lengthFor as $label) {
-            if ($label === null || $label === self::DROP || isset($lengthOptions[$label])) {
-                continue;
-            }
-            $lengthOptions[$label] = $this->ensureOption($lengthGroup, $label);
-        }
 
-        // Target's own SKUs get their own length.
-        $targetLength = $lengthFor[$target->id];
-        if ($targetLength !== self::DROP && $targetLength !== null) {
-            foreach ($target->products as $product) {
-                $this->setLengthValue($product, $lengthGroup, $lengthOptions[$targetLength]);
-            }
-        }
+        // Target's own SKUs first.
+        $this->applyLengthToProducts($target->products, $target, $plan[$target->id], $lengthGroup, $lengthOptions);
 
         foreach ($families as $family) {
             if ($family->id === $target->id) {
                 continue;
             }
 
-            $length = $lengthFor[$family->id];
-
-            if ($length === self::DROP) {
+            if ($plan[$family->id]['mode'] === 'drop') {
                 foreach ($family->products as $product) {
                     $this->deleteProduct($product);
                 }
@@ -219,9 +247,10 @@ class MergeLengthFamiliesCommand extends Command
                 continue;
             }
 
-            [$groupMap, $optionMap] = $this->mapVariants($family, $target, (int) $lengthGroup->id);
+            [$groupMap, $optionMap] = $this->mapVariants($family, $target, (int) $lengthGroup->id, $targetCountName);
 
             foreach ($family->products as $product) {
+                $length = $this->productLength($product, $family, $plan[$family->id]);
                 $product->update(['product_family_id' => $target->id]);
 
                 foreach ($product->variantValues as $value) {
@@ -229,7 +258,7 @@ class MergeLengthFamiliesCommand extends Command
                     $mappedOption = $optionMap[(int) $value->product_variant_option_id] ?? null;
 
                     if ($mappedGroup === null || $mappedOption === null) {
-                        $value->delete();
+                        $value->delete(); // dropped Length / Pack / unmapped axis
 
                         continue;
                     }
@@ -240,7 +269,9 @@ class MergeLengthFamiliesCommand extends Command
                     ]);
                 }
 
-                $this->setLengthValue($product, $lengthGroup, $lengthOptions[$length]);
+                if ($length !== null) {
+                    $this->setLengthValue($product, $lengthGroup, $this->lengthOption($lengthGroup, $length, $lengthOptions));
+                }
 
                 ProductCategoryAssignment::query()->where('product_id', $product->id)
                     ->update(['product_family_id' => $target->id]);
@@ -250,7 +281,6 @@ class MergeLengthFamiliesCommand extends Command
                     ->update(['product_family_id' => $target->id]);
             }
 
-            // Source family now has no products; deleting it cascades its variant groups.
             $family->delete();
         }
 
@@ -259,6 +289,49 @@ class MergeLengthFamiliesCommand extends Command
         if (Schema::hasColumn('product_families', 'catalogue_scope_key') && filled($target->catalogue_scope_key)) {
             $target->update(['catalogue_scope_key' => null]);
         }
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection<int, Product>  $products
+     * @param  array{mode: string, length: ?string, lengthGroupId: ?int}  $familyPlan
+     * @param  array<string, ProductVariantOption>  $lengthOptions
+     */
+    private function applyLengthToProducts($products, ProductFamily $family, array $familyPlan, ProductVariantGroup $lengthGroup, array &$lengthOptions): void
+    {
+        foreach ($products as $product) {
+            $length = $this->productLength($product, $family, $familyPlan);
+            if ($length !== null) {
+                $this->setLengthValue($product, $lengthGroup, $this->lengthOption($lengthGroup, $length, $lengthOptions));
+            }
+        }
+    }
+
+    /**
+     * @param  array{mode: string, length: ?string, lengthGroupId: ?int}  $familyPlan
+     */
+    private function productLength(Product $product, ProductFamily $family, array $familyPlan): ?string
+    {
+        if ($familyPlan['mode'] === 'per_product' && $familyPlan['lengthGroupId']) {
+            $value = $product->variantValues->firstWhere('product_variant_group_id', $familyPlan['lengthGroupId']);
+            $group = $family->variantGroups->firstWhere('id', $familyPlan['lengthGroupId']);
+            $option = $group?->options->firstWhere('id', $value?->product_variant_option_id);
+
+            return $option ? $this->normalizeLength($option->label) : null;
+        }
+
+        return $familyPlan['length'];
+    }
+
+    /**
+     * @param  array<string, ProductVariantOption>  $cache
+     */
+    private function lengthOption(ProductVariantGroup $lengthGroup, string $label, array &$cache): ProductVariantOption
+    {
+        if (! isset($cache[$label])) {
+            $cache[$label] = $this->ensureOption($lengthGroup, $label, $this->lengthSortKey($label));
+        }
+
+        return $cache[$label];
     }
 
     private function ensureLengthGroup(ProductFamily $target): ProductVariantGroup
@@ -270,6 +343,8 @@ class MergeLengthFamiliesCommand extends Command
             ->first();
 
         if ($existing) {
+            $existing->update(['axis_role' => ProductVariantGroup::AXIS_ROLE_MAIN]);
+
             return $existing;
         }
 
@@ -278,11 +353,11 @@ class MergeLengthFamiliesCommand extends Command
             'name' => $name,
             'variant_type' => 'measurement',
             'axis_role' => ProductVariantGroup::AXIS_ROLE_MAIN,
-            'sort_order' => 0, // main axis sorts first
+            'sort_order' => 0,
         ]);
     }
 
-    private function ensureOption(ProductVariantGroup $group, string $label): ProductVariantOption
+    private function ensureOption(ProductVariantGroup $group, string $label, int $sortOrder = 0): ProductVariantOption
     {
         $existing = $group->options()
             ->whereRaw('LOWER(label) = ?', [mb_strtolower($label)])
@@ -296,23 +371,35 @@ class MergeLengthFamiliesCommand extends Command
             'product_variant_group_id' => $group->id,
             'label' => $label,
             'value' => $label,
-            'sort_order' => $this->lengthSortKey($label),
+            'sort_order' => $sortOrder,
         ]);
     }
 
     /**
-     * Map a source family's groups/options onto the target family's, creating any
-     * that are missing. The Length group is skipped (handled separately).
+     * Map a source family's groups/options onto the target's, creating any that
+     * are missing. Length groups are folded into the main axis (skipped here);
+     * redundant count/pack groups (a count axis whose name differs from the
+     * target's) are dropped.
      *
      * @return array{0: array<int,int>, 1: array<int,int>}
      */
-    private function mapVariants(ProductFamily $source, ProductFamily $target, int $lengthGroupId): array
+    private function mapVariants(ProductFamily $source, ProductFamily $target, int $lengthGroupId, ?string $targetCountName): array
     {
         $target->load('variantGroups.options');
         $groupMap = [];
         $optionMap = [];
 
         foreach ($source->variantGroups as $sourceGroup) {
+            if ($this->isLengthGroup($sourceGroup)) {
+                continue; // folded into main Length axis
+            }
+
+            if ($this->isCountConcept($sourceGroup)
+                && $targetCountName !== null
+                && mb_strtolower($sourceGroup->name) !== mb_strtolower($targetCountName)) {
+                continue; // redundant pack/count axis -> drop
+            }
+
             $targetGroup = $target->variantGroups
                 ->reject(fn (ProductVariantGroup $g): bool => (int) $g->id === $lengthGroupId)
                 ->first(fn (ProductVariantGroup $g): bool => mb_strtolower($g->name) === mb_strtolower($sourceGroup->name));
@@ -369,12 +456,25 @@ class MergeLengthFamiliesCommand extends Command
                 continue;
             }
 
-            $role = $this->isCountConcept($group)
-                ? ProductVariantGroup::AXIS_ROLE_COMMON
-                : ProductVariantGroup::AXIS_ROLE_SUB_MAIN;
-
-            $group->update(['axis_role' => $role]);
+            $group->update([
+                'axis_role' => $this->isCountConcept($group)
+                    ? ProductVariantGroup::AXIS_ROLE_COMMON
+                    : ProductVariantGroup::AXIS_ROLE_SUB_MAIN,
+            ]);
         }
+    }
+
+    private function countGroupName(ProductFamily $target): ?string
+    {
+        $group = $target->variantGroups->first(fn (ProductVariantGroup $g): bool => $this->isCountConcept($g));
+
+        return $group?->name;
+    }
+
+    private function isLengthGroup(ProductVariantGroup $group): bool
+    {
+        return mb_strtolower((string) $group->variant_type) === 'measurement'
+            || str_contains(mb_strtolower((string) $group->name), 'length');
     }
 
     private function isCountConcept(ProductVariantGroup $group): bool
@@ -411,7 +511,6 @@ class MergeLengthFamiliesCommand extends Command
             return '';
         }
 
-        // "20" or "20 inch" -> 20"; leave already-suffixed and non-numeric labels as-is.
         if (preg_match('/^\d+(\.\d+)?$/', $label)) {
             return $label.'"';
         }
