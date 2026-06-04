@@ -14458,9 +14458,57 @@
         background: #fffaf3;
     }
 
+    /* Gallery batch queue: photos waiting to be saved together */
+    .rfm-quick-image-queue {
+        @apply mt-1 rounded-[14px] border p-3;
+        border-color: #cfe0d6;
+        background: #f1f8f4;
+    }
+
+    .rfm-quick-image-queue-head {
+        @apply mb-2 flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.1em];
+        color: #2f6b54;
+    }
+
+    .rfm-quick-image-queue-head em {
+        @apply inline-flex min-w-[1.5rem] items-center justify-center rounded-full px-2 py-0.5 not-italic text-white;
+        background: #1f6f54;
+    }
+
+    .rfm-quick-image-queue-grid {
+        @apply grid gap-2;
+        grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
+    }
+
+    .rfm-quick-image-queue-cell {
+        @apply relative overflow-hidden rounded-[10px] border;
+        border-color: #cfe0d6;
+        background: #fff;
+        aspect-ratio: 1 / 1;
+    }
+
+    .rfm-quick-image-queue-cell img {
+        @apply h-full w-full object-cover;
+    }
+
+    .rfm-quick-image-queue-remove {
+        @apply absolute right-1 top-1 inline-flex h-6 w-6 items-center justify-center rounded-full text-sm font-black leading-none text-white;
+        background: rgba(20, 18, 15, 0.62);
+    }
+
+    .rfm-quick-image-queue-hint {
+        @apply m-0 mt-2 text-[11px];
+        color: #6a7b71;
+    }
+
     .rfm-quick-image-foot {
-        @apply flex flex-col gap-2 border-t bg-[#fffaf3] px-0 pb-3 pt-2;
+        @apply sticky bottom-0 z-[2] flex flex-col gap-2 border-t bg-[#fffaf3] px-0 pb-3 pt-2;
         border-color: #e5dbc9;
+        padding-bottom: calc(0.75rem + env(safe-area-inset-bottom));
+    }
+
+    .rfm-quick-image-foot .rfm-media-add-btn {
+        min-height: 3.25rem;
     }
 
     @media (min-width: 768px) {

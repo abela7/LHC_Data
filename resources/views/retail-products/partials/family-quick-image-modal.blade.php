@@ -159,9 +159,9 @@
 
                     <div class="rfm-media-tab-panel" data-rfm-media-panel="upload">
                         <label class="rfm-media-capture">
-                            <input type="file" name="uploaded_image_alt" accept="image/*" data-rfm-upload>
-                            <span class="rfm-media-capture-title">Choose file</span>
-                            <small class="rfm-media-capture-hint">JPEG, PNG, WebP or GIF — up to 35 MB.</small>
+                            <input type="file" name="uploaded_image_alt" accept="image/*" multiple data-rfm-upload>
+                            <span class="rfm-media-capture-title">Choose file(s)</span>
+                            <small class="rfm-media-capture-hint">JPEG, PNG, WebP or GIF — up to 35 MB. Pick several for gallery.</small>
                         </label>
                     </div>
 
@@ -219,6 +219,15 @@
                         <span>Use as primary thumbnail</span>
                     </label>
                 </details>
+
+                <section class="rfm-quick-image-queue" data-rfm-quick-image-queue hidden aria-label="Photos ready to save">
+                    <div class="rfm-quick-image-queue-head">
+                        <strong>Ready to save</strong>
+                        <em data-rfm-quick-image-queue-count>0</em>
+                    </div>
+                    <div class="rfm-quick-image-queue-grid" data-rfm-quick-image-queue-grid></div>
+                    <p class="rfm-quick-image-queue-hint">Take or choose more, then save them all at once.</p>
+                </section>
 
                 <footer class="rfm-quick-image-foot">
                     <p class="rfm-quick-image-status" data-rfm-quick-image-status hidden></p>

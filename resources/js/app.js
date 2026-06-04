@@ -3812,6 +3812,151 @@ const initRetailFamilyManager = () => {
     let quickImageTargets = {};
     const quickImageCompletedRoles = new Set();
 
+    // Gallery batch capture: photos taken/chosen are held here until "Save N photos".
+    const quickImageQueueEl = quickImageModal?.querySelector('[data-rfm-quick-image-queue]');
+    const quickImageQueueGrid = quickImageModal?.querySelector('[data-rfm-quick-image-queue-grid]');
+    const quickImageQueueCount = quickImageModal?.querySelector('[data-rfm-quick-image-queue-count]');
+    let quickImageQueue = []; // [{ file, url }]
+
+    const clearQuickImageQueue = () => {
+        quickImageQueue.forEach((item) => {
+            try { URL.revokeObjectURL(item.url); } catch (e) { /* noop */ }
+        });
+        quickImageQueue = [];
+        renderQuickImageQueue();
+    };
+
+    const renderQuickImageQueue = () => {
+        if (!quickImageQueueEl || !quickImageQueueGrid) return;
+        const count = quickImageQueue.length;
+        quickImageQueueEl.hidden = count === 0;
+        if (quickImageQueueCount) quickImageQueueCount.textContent = String(count);
+        quickImageQueueGrid.innerHTML = '';
+        quickImageQueue.forEach((item, index) => {
+            const cell = document.createElement('div');
+            cell.className = 'rfm-quick-image-queue-cell';
+            const img = document.createElement('img');
+            img.src = item.url;
+            img.alt = item.file.name || `Photo ${index + 1}`;
+            img.loading = 'lazy';
+            const remove = document.createElement('button');
+            remove.type = 'button';
+            remove.className = 'rfm-quick-image-queue-remove';
+            remove.setAttribute('aria-label', `Remove photo ${index + 1}`);
+            remove.textContent = '×';
+            remove.addEventListener('click', () => {
+                try { URL.revokeObjectURL(item.url); } catch (e) { /* noop */ }
+                quickImageQueue.splice(index, 1);
+                renderQuickImageQueue();
+                updateQuickImageSubmitLabel();
+            });
+            cell.append(img, remove);
+            quickImageQueueGrid.appendChild(cell);
+        });
+    };
+
+    const enqueueQuickImageFiles = (files) => {
+        Array.from(files || []).forEach((file) => {
+            if (file && file.type && file.type.startsWith('image/')) {
+                quickImageQueue.push({ file, url: URL.createObjectURL(file) });
+            }
+        });
+        renderQuickImageQueue();
+    };
+
+    const currentQuickImageRole = () => quickImageRoleSelect?.value || '';
+    const isGalleryBatchRole = (role) => role === 'gallery';
+
+    const updateQuickImageSubmitLabel = () => {
+        const submitButton = quickImageForm?.querySelector('[data-rfm-quick-image-submit]');
+        if (!submitButton) return;
+        const role = currentQuickImageRole();
+        if (isGalleryBatchRole(role)) {
+            const n = quickImageQueue.length;
+            submitButton.textContent = n > 0 ? `Save ${n} photo${n === 1 ? '' : 's'}` : 'Take or choose photos';
+            submitButton.disabled = n === 0;
+        } else {
+            submitButton.disabled = false;
+        }
+    };
+
+    // Upload one queued photo through the same endpoint the single-save uses.
+    const uploadOneQuickImage = async (file) => {
+        const payload = new FormData(quickImageForm);
+        const prepared = await normalizeImageUploadFile(file);
+        payload.set('uploaded_image', prepared, prepared.name || file.name || `photo-${Date.now()}.jpg`);
+        payload.delete('uploaded_image_alt');
+
+        const response = await fetch(quickImageForm.action, {
+            method: 'POST',
+            body: payload,
+            headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+        });
+        const data = await jsonResponseOrText(response);
+        if (!response.ok) {
+            throw new Error(uploadFailureMessage(response, data, 'Unable to save image.', quickImageForm.action));
+        }
+        return data;
+    };
+
+    const applyQuickImageSaveResult = (role, data) => {
+        const media = data.media || {};
+        if (!media.url) return;
+        const roleTarget = quickImageTargets[role] || {};
+        const savedImage = {
+            id: media.id || '',
+            url: media.url,
+            label: media.alt_text || `${role} photo`,
+            deleteUrl: media.delete_url || '',
+        };
+        roleTarget.images = roleShouldReplaceSingleImage(role)
+            ? [savedImage]
+            : [...(Array.isArray(roleTarget.images) ? roleTarget.images : []), savedImage];
+        roleTarget.count = media.count ?? roleTarget.images.length;
+        if (media.mobile_target_type) roleTarget.mobileTargetType = media.mobile_target_type;
+        if (media.mobile_target_id) roleTarget.mobileTargetId = media.mobile_target_id;
+        quickImageTargets[role] = roleTarget;
+        persistQuickImageTargetsToTrigger();
+    };
+
+    // Save the whole gallery queue at once (loops the single-image endpoint).
+    const saveGalleryQueue = async () => {
+        const role = currentQuickImageRole();
+        const submitButton = quickImageForm.querySelector('[data-rfm-quick-image-submit]');
+        const items = [...quickImageQueue];
+        const total = items.length;
+        if (!total) return;
+
+        if (submitButton) submitButton.disabled = true;
+        let saved = 0;
+        let failed = 0;
+
+        for (let i = 0; i < total; i++) {
+            if (submitButton) submitButton.textContent = `Saving ${i + 1}/${total}…`;
+            setQuickImageStatus(`Saving ${i + 1} of ${total}…`);
+            try {
+                const data = await uploadOneQuickImage(items[i].file);
+                applyQuickImageSaveResult(role, data);
+                saved++;
+            } catch (err) {
+                failed++;
+            }
+        }
+
+        quickImageCompletedRoles.add(role);
+        clearQuickImageQueue();
+        renderQuickImageSavedPhotos(role);
+        syncQuickImageRoleUi(role);
+
+        const msg = failed
+            ? `Saved ${saved}, ${failed} failed — try the failed ones again.`
+            : `Saved ${saved} gallery photo${saved === 1 ? '' : 's'}.`;
+        setQuickImageStatus(msg, failed > 0);
+        showToast(msg, failed > 0);
+        if (submitButton) submitButton.disabled = false;
+        updateQuickImageSubmitLabel();
+    };
+
     const setQuickImageStatus = (message, isError = false) => {
         if (!quickImageStatus) return;
         quickImageStatus.hidden = !message;
@@ -4066,6 +4211,8 @@ const initRetailFamilyManager = () => {
         if (!role) return;
         syncQuickImageRoleUi(role);
         syncQuickImageTarget(role);
+        clearQuickImageQueue();
+        updateQuickImageSubmitLabel();
     };
 
     const resetQuickImageInputsAfterSave = () => {
@@ -4094,11 +4241,26 @@ const initRetailFamilyManager = () => {
         quickImageDeleteUrl = '';
         quickImageTargets = {};
         quickImageCompletedRoles.clear();
+        clearQuickImageQueue();
         document.body.classList.remove('rfm-quick-image-open');
     };
 
     quickImageForm?.addEventListener('rfm:file-preview-changed', (event) => {
         setQuickImageNextPreview(event.detail?.src || null);
+    });
+
+    // Gallery role: capturing/choosing photos adds them to the batch queue
+    // instead of saving immediately, so several can be saved at once.
+    quickImageForm?.addEventListener('change', (event) => {
+        const input = event.target;
+        if (!input.matches || !input.matches('[data-rfm-camera], [data-rfm-upload]')) return;
+        if (!isGalleryBatchRole(currentQuickImageRole())) return;
+        if (!input.files || !input.files.length) return;
+        enqueueQuickImageFiles(input.files);
+        input.value = '';
+        quickImageForm.dispatchEvent(new CustomEvent('rfm:file-preview-clear', { bubbles: true }));
+        setQuickImageNextPreview(null);
+        updateQuickImageSubmitLabel();
     });
 
     quickImageRoleChips.forEach((chip) => {
@@ -4245,6 +4407,16 @@ const initRetailFamilyManager = () => {
 
         if (quickImageUsageHidden && quickImageUsagePicker) {
             quickImageUsageHidden.value = quickImageUsagePicker.value || quickImageUsageHidden.value || 'all';
+        }
+
+        // Gallery batch: save every queued photo at once.
+        if (isGalleryBatchRole(currentRole)) {
+            if (!quickImageQueue.length) {
+                setQuickImageStatus('Take or choose at least one photo first.', true);
+                return;
+            }
+            await saveGalleryQueue();
+            return;
         }
 
         if (submitButton) {
