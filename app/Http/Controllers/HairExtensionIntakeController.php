@@ -593,6 +593,8 @@ class HairExtensionIntakeController extends Controller
             $filterProductType,
         );
 
+        $filterCascade = $this->submittedIntakeFilterCascade($filterSourceRows);
+
         $query = $this->submittedIntakeBaseQuery($showDraftsOnly)
             ->with([
                 'brand.catalogue',
@@ -698,6 +700,7 @@ class HairExtensionIntakeController extends Controller
             'filterBrands' => $filterOptions['brands'],
             'filterProductTypes' => $filterOptions['product_types'],
             'filterStyles' => $filterOptions['styles'],
+            'filterCascade' => $filterCascade,
             'hasActiveFilters' => $hasActiveFilters,
         ]);
     }
@@ -1766,18 +1769,14 @@ class HairExtensionIntakeController extends Controller
         $brandRows = $rows;
 
         $productTypeRows = $filterBrand === ''
-            ? $rows
+            ? collect()
             : $rows->filter(fn (HairExtensionIntake $intake): bool => ($intake->brand_name ?: '') === $filterBrand);
 
-        $styleRows = $productTypeRows;
-        if ($filterBrand !== '') {
-            $styleRows = $styleRows->filter(fn (HairExtensionIntake $intake): bool => ($intake->brand_name ?: '') === $filterBrand);
-        }
-        if ($filterProductType !== '') {
-            $styleRows = $styleRows->filter(
+        $styleRows = ($filterBrand !== '' && $filterProductType !== '')
+            ? $productTypeRows->filter(
                 fn (HairExtensionIntake $intake): bool => $this->intakeProductTypeLabel($intake) === $filterProductType,
-            );
-        }
+            )
+            : collect();
 
         return [
             'brands' => $this->submittedIntakeFilterOptionList(
@@ -1834,5 +1833,58 @@ class HairExtensionIntakeController extends Controller
         }
 
         return $intake->style?->name;
+    }
+
+    /**
+     * Nested brand → product type → style options for cascading filters.
+     *
+     * @param  Collection<int, HairExtensionIntake>  $rows
+     * @return array{typesByBrand: array<string, list<array{label: string, count: int}>>, stylesByKey: array<string, list<array{label: string, count: int}>>}
+     */
+    private function submittedIntakeFilterCascade(Collection $rows): array
+    {
+        $typesByBrand = [];
+        $stylesByKey = [];
+
+        foreach ($rows as $intake) {
+            $brand = filled($intake->brand_name) ? $intake->brand_name : null;
+            if ($brand === null) {
+                continue;
+            }
+
+            $productType = $this->intakeProductTypeLabel($intake);
+            if ($productType !== null) {
+                $typesByBrand[$brand][$productType] = ($typesByBrand[$brand][$productType] ?? 0) + 1;
+            }
+
+            $style = $this->intakeStyleLabel($intake);
+            if ($productType !== null && $style !== null) {
+                $key = $brand.'|'.$productType;
+                $stylesByKey[$key][$style] = ($stylesByKey[$key][$style] ?? 0) + 1;
+            }
+        }
+
+        $mapCounts = static function (array $counts): array {
+            return collect($counts)
+                ->map(fn (int $count, string $label): array => ['label' => $label, 'count' => $count])
+                ->sortBy('label', SORT_NATURAL | SORT_FLAG_CASE)
+                ->values()
+                ->all();
+        };
+
+        $typesByBrandOut = [];
+        foreach ($typesByBrand as $brand => $types) {
+            $typesByBrandOut[$brand] = $mapCounts($types);
+        }
+
+        $stylesByKeyOut = [];
+        foreach ($stylesByKey as $key => $styles) {
+            $stylesByKeyOut[$key] = $mapCounts($styles);
+        }
+
+        return [
+            'typesByBrand' => $typesByBrandOut,
+            'stylesByKey' => $stylesByKeyOut,
+        ];
     }
 }

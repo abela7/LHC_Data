@@ -94,6 +94,17 @@
                 font-size:.92rem;
                 font-weight:700;
             }
+            .his-filters-field select:disabled {
+                opacity:.55;
+                cursor:not-allowed;
+                background:#f4efe5;
+            }
+            .his-filters-hint {
+                color:var(--hei-muted);
+                font-size:.72rem;
+                font-weight:700;
+                line-height:1.35;
+            }
             .his-filters-actions {
                 display:flex;
                 flex-wrap:wrap;
@@ -610,13 +621,17 @@
             </div>
         </section>
 
-        <form method="GET" action="{{ route('hair-extension-intake.submitted') }}" class="his-filters">
+        <form method="GET"
+              action="{{ route('hair-extension-intake.submitted') }}"
+              class="his-filters"
+              data-his-filters
+              data-his-filter-cascade='@json($filterCascade)'>
             @if ($includeDrafts)
                 <input type="hidden" name="include_drafts" value="1">
             @endif
             <label class="his-filters-field">
                 <span>Brand</span>
-                <select name="brand">
+                <select name="brand" data-his-filter-brand>
                     <option value="">All brands</option>
                     @foreach ($filterBrands as $option)
                         <option value="{{ $option['label'] }}" @selected($filterBrand === $option['label'])>
@@ -627,28 +642,50 @@
             </label>
             <label class="his-filters-field">
                 <span>Product type</span>
-                <select name="product_type">
-                    <option value="">All product types</option>
-                    @foreach ($filterProductTypes as $option)
-                        <option value="{{ $option['label'] }}" @selected($filterProductType === $option['label'])>
-                            {{ $option['label'] }} ({{ number_format($option['count']) }})
-                        </option>
-                    @endforeach
+                <select name="product_type"
+                        data-his-filter-product-type
+                        @disabled($filterBrand === '')>
+                    @if ($filterBrand === '')
+                        <option value="">Choose a brand first</option>
+                    @else
+                        <option value="">All product types for {{ $filterBrand }}</option>
+                        @foreach ($filterProductTypes as $option)
+                            <option value="{{ $option['label'] }}" @selected($filterProductType === $option['label'])>
+                                {{ $option['label'] }} ({{ number_format($option['count']) }})
+                            </option>
+                        @endforeach
+                    @endif
                 </select>
+                <span class="his-filters-hint" data-his-filter-product-type-hint @if ($filterBrand !== '') hidden @endif>
+                    Choose a brand to see its product types.
+                </span>
             </label>
             <label class="his-filters-field">
                 <span>Style / family</span>
-                <select name="style">
-                    <option value="">All styles</option>
-                    @foreach ($filterStyles as $option)
-                        <option value="{{ $option['label'] }}" @selected($filterStyle === $option['label'])>
-                            {{ $option['label'] }} ({{ number_format($option['count']) }})
-                        </option>
-                    @endforeach
+                <select name="style"
+                        data-his-filter-style
+                        @disabled($filterBrand === '' || $filterProductType === '')>
+                    @if ($filterBrand === '')
+                        <option value="">Choose a brand first</option>
+                    @elseif ($filterProductType === '')
+                        <option value="">Choose a product type first</option>
+                    @else
+                        <option value="">All styles for {{ $filterProductType }}</option>
+                        @foreach ($filterStyles as $option)
+                            <option value="{{ $option['label'] }}" @selected($filterStyle === $option['label'])>
+                                {{ $option['label'] }} ({{ number_format($option['count']) }})
+                            </option>
+                        @endforeach
+                    @endif
                 </select>
+                <span class="his-filters-hint" data-his-filter-style-hint @if ($filterBrand === '' || $filterProductType !== '') hidden @endif>
+                    Choose a product type to see its styles and families.
+                </span>
             </label>
             <div class="his-filters-actions">
-                <button type="submit" class="his-btn primary">Apply filters</button>
+                <noscript>
+                    <button type="submit" class="his-btn primary">Apply filters</button>
+                </noscript>
                 @if ($hasActiveFilters)
                     <a class="his-btn" href="{{ $includeDrafts ? route('hair-extension-intake.submitted', ['include_drafts' => 1]) : route('hair-extension-intake.submitted') }}">
                         Clear filters
@@ -1062,6 +1099,119 @@
             </div>
         </div>
     </div>
+
+    <script>
+    (() => {
+        const filterForm = document.querySelector('[data-his-filters]');
+        if (filterForm) {
+            const cascade = JSON.parse(filterForm.dataset.hisFilterCascade || '{"typesByBrand":{},"stylesByKey":{}}');
+            const brandSelect = filterForm.querySelector('[data-his-filter-brand]');
+            const productTypeSelect = filterForm.querySelector('[data-his-filter-product-type]');
+            const styleSelect = filterForm.querySelector('[data-his-filter-style]');
+            const productTypeHint = filterForm.querySelector('[data-his-filter-product-type-hint]');
+            const styleHint = filterForm.querySelector('[data-his-filter-style-hint]');
+
+            const formatCount = (count) => new Intl.NumberFormat().format(count);
+
+            const fillSelect = (select, options, placeholder, selected) => {
+                select.innerHTML = '';
+                const blank = document.createElement('option');
+                blank.value = '';
+                blank.textContent = placeholder;
+                select.appendChild(blank);
+                (options || []).forEach((option) => {
+                    const row = document.createElement('option');
+                    row.value = option.label;
+                    row.textContent = `${option.label} (${formatCount(option.count)})`;
+                    if (option.label === selected) {
+                        row.selected = true;
+                    }
+                    select.appendChild(row);
+                });
+            };
+
+            const setHint = (element, message) => {
+                if (!element) {
+                    return;
+                }
+                element.textContent = message;
+                element.hidden = message === '';
+                element.style.display = message === '' ? 'none' : '';
+            };
+
+            const syncProductType = (brand, selected = '') => {
+                const disabled = brand === '';
+                productTypeSelect.disabled = disabled;
+                setHint(productTypeHint, disabled ? 'Choose a brand to see its product types.' : '');
+
+                if (disabled) {
+                    fillSelect(productTypeSelect, [], 'Choose a brand first', '');
+                    return;
+                }
+
+                fillSelect(
+                    productTypeSelect,
+                    cascade.typesByBrand?.[brand] || [],
+                    `All product types for ${brand}`,
+                    selected,
+                );
+            };
+
+            const syncStyle = (brand, productType, selected = '') => {
+                const disabled = brand === '' || productType === '';
+                styleSelect.disabled = disabled;
+
+                if (brand === '') {
+                    setHint(styleHint, '');
+                    fillSelect(styleSelect, [], 'Choose a brand first', '');
+                    return;
+                }
+
+                if (productType === '') {
+                    setHint(styleHint, 'Choose a product type to see its styles and families.');
+                    fillSelect(styleSelect, [], 'Choose a product type first', '');
+                    return;
+                }
+
+                setHint(styleHint, '');
+                const key = `${brand}|${productType}`;
+                fillSelect(
+                    styleSelect,
+                    cascade.stylesByKey?.[key] || [],
+                    `All styles for ${productType}`,
+                    selected,
+                );
+            };
+
+            const applyFilters = () => {
+                if (typeof filterForm.requestSubmit === 'function') {
+                    filterForm.requestSubmit();
+                } else {
+                    filterForm.submit();
+                }
+            };
+
+            brandSelect?.addEventListener('change', () => {
+                const brand = brandSelect.value;
+                syncProductType(brand, '');
+                syncStyle(brand, '', '');
+                applyFilters();
+            });
+
+            productTypeSelect?.addEventListener('change', () => {
+                const brand = brandSelect.value;
+                const productType = productTypeSelect.value;
+                syncStyle(brand, productType, '');
+                applyFilters();
+            });
+
+            styleSelect?.addEventListener('change', applyFilters);
+
+            syncProductType(brandSelect?.value || '', productTypeSelect?.value || '');
+            syncStyle(brandSelect?.value || '', productTypeSelect?.value || '', styleSelect?.value || '');
+        }
+    })();
+    </script>
 
     <script>
     (() => {
