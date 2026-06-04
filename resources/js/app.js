@@ -6543,7 +6543,10 @@ const initVariantModelChips = (root, csrf, showToast) => {
         }
     };
 
-    const closeLengthPicker = () => document.querySelector('.rfm-length-picker-backdrop')?.remove();
+    const closeLengthPicker = () => {
+        document.querySelector('.rfm-length-picker-backdrop')?.remove();
+        document.body.classList.remove('rfm-picker-open');
+    };
     const closeSellableCreateReview = () => document.querySelector('.rfm-sku-create-preview-backdrop')?.remove();
 
     const buildCreateSkusFormData = (optionIds, mainOptionIds = [], subOptionIds = []) => {
@@ -6774,11 +6777,24 @@ const initVariantModelChips = (root, csrf, showToast) => {
 
         const pop = document.createElement('div');
         pop.className = 'rfm-length-picker';
+        pop.setAttribute('role', 'dialog');
+        pop.setAttribute('aria-modal', 'true');
 
-        const title = document.createElement('div');
+        const header = document.createElement('div');
+        header.className = 'rfm-length-picker-header';
+
+        const title = document.createElement('h2');
         title.className = 'rfm-length-picker-title';
         title.textContent = titleText;
-        pop.appendChild(title);
+
+        const hint = document.createElement('p');
+        hint.className = 'rfm-length-picker-hint';
+        hint.textContent = options.length > 8
+            ? `Scroll to see all ${options.length} values. Tick those to include.`
+            : 'Tick the values to include, then continue.';
+
+        header.append(title, hint);
+        pop.appendChild(header);
 
         const list = document.createElement('div');
         list.className = 'rfm-length-picker-list';
@@ -6791,10 +6807,12 @@ const initVariantModelChips = (root, csrf, showToast) => {
             cb.value = String(opt.id);
             cb.checked = !exists; // new main: all checked; sub: only missing mains
             const name = document.createElement('span');
+            name.className = 'rfm-length-picker-row-label';
             name.textContent = opt.label;
+            name.title = opt.label;
             if (isSub) {
                 const note = document.createElement('em');
-                note.textContent = exists ? 'already exists' : 'missing';
+                note.textContent = exists ? 'exists' : 'new';
                 row.append(cb, name, note);
             } else {
                 row.append(cb, name);
@@ -6818,15 +6836,20 @@ const initVariantModelChips = (root, csrf, showToast) => {
 
         backdrop.appendChild(pop);
         document.body.appendChild(backdrop);
+        document.body.classList.add('rfm-picker-open');
 
-        const rect = (anchorEl || document.body).getBoundingClientRect();
-        pop.style.top = `${Math.min(window.innerHeight - 220, rect.bottom + 6)}px`;
-        pop.style.left = `${Math.max(12, Math.min(window.innerWidth - 300, rect.left))}px`;
+        const onKeydown = (event) => {
+            if (event.key === 'Escape') {
+                closeLengthPicker();
+            }
+        };
+        document.addEventListener('keydown', onKeydown, { once: true });
 
         backdrop.addEventListener('click', (e) => {
             if (e.target === backdrop) closeLengthPicker();
         });
         cancel.addEventListener('click', closeLengthPicker);
+        create.focus();
         create.addEventListener('click', async () => {
             const chosen = [...pop.querySelectorAll('input[type=checkbox]:checked')].map((c) => Number(c.value));
             closeLengthPicker();
