@@ -990,19 +990,43 @@ class RetailProductController extends Controller
     }
 
     /**
-     * @return array{id: int, name: string, sku: ?string, url: string, variants: string}
+     * @return array{
+     *     id: int,
+     *     name: string,
+     *     sku: ?string,
+     *     url: string,
+     *     variants: string,
+     *     variant_rows: list<array{group: string, label: string, group_id: int, option_id: int}>,
+     *     variant_option_ids: list<int>,
+     *     variant_options_by_group: array<int, int>,
+     *     barcode: ?string,
+     *     status: ?string,
+     *     needs_price: bool,
+     *     operations_url: string,
+     *     destroy_url: string
+     * }
      */
     private function sellableProductSummary(Product $product): array
     {
-        $product->loadMissing(['variantValues.option', 'variantValues.group']);
+        $product->loadMissing(['price', 'variantValues.option', 'variantValues.group']);
 
-        $variants = $product->variantValues
+        $variantValues = $product->variantValues
             ->sortBy(fn ($value) => sprintf(
                 '%04d:%04d',
                 (int) ($value->group?->sort_order ?? 9999),
                 (int) ($value->option?->sort_order ?? 9999),
-            ))
-            ->map(fn ($value): string => ($value->group?->name ?? 'Variant').': '.($value->option?->label ?? '—'))
+            ));
+        $variantRows = $variantValues
+            ->map(fn ($value): array => [
+                'group' => (string) ($value->group?->name ?? 'Variant'),
+                'label' => (string) ($value->option?->label ?? '—'),
+                'group_id' => (int) $value->product_variant_group_id,
+                'option_id' => (int) $value->product_variant_option_id,
+            ])
+            ->values()
+            ->all();
+        $variants = collect($variantRows)
+            ->map(fn (array $value): string => $value['group'].': '.$value['label'])
             ->implode(' · ');
 
         return [
@@ -1011,6 +1035,16 @@ class RetailProductController extends Controller
             'sku' => $product->sku,
             'url' => route('retail-products.products.show', $product),
             'variants' => $variants,
+            'variant_rows' => $variantRows,
+            'variant_option_ids' => collect($variantRows)->pluck('option_id')->filter()->values()->all(),
+            'variant_options_by_group' => collect($variantRows)
+                ->mapWithKeys(fn (array $row): array => [$row['group_id'] => $row['option_id']])
+                ->all(),
+            'barcode' => $product->barcode,
+            'status' => $product->status,
+            'needs_price' => $product->price?->retail_price === null,
+            'operations_url' => route('retail-products.products.operations.update', $product),
+            'destroy_url' => route('retail-products.products.destroy', $product),
         ];
     }
 

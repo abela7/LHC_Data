@@ -6033,28 +6033,169 @@ const initVariantModelChips = (root, csrf, showToast) => {
         }));
     };
 
-    const refreshFamilySkuList = async () => {
-        try {
-            const response = await fetch(window.location.href, {
-                headers: { Accept: 'text/html', 'X-Requested-With': 'XMLHttpRequest' },
-            });
-            if (!response.ok) return;
-            const html = await response.text();
-            const doc = new DOMParser().parseFromString(html, 'text/html');
-            const freshList = doc.querySelector('[data-rfm-list]');
-            const currentList = root.querySelector('[data-rfm-list]');
-            if (freshList && currentList) {
-                currentList.innerHTML = freshList.innerHTML;
-            }
-            const freshRefresh = doc.querySelector('[data-rfm-refresh-skus-form]');
-            const currentRefresh = root.querySelector('[data-rfm-refresh-skus-form]');
-            if (freshRefresh && currentRefresh?.parentElement) {
-                currentRefresh.parentElement.innerHTML = freshRefresh.parentElement.innerHTML;
-                initVariantRefreshSkus(root);
-            }
-        } catch {
-            // Non-blocking: chips still update if list refresh fails.
+    const updateSkuGroupCount = (group) => {
+        if (!group) return;
+        const remaining = group.querySelectorAll('[data-rfm-sku]').length;
+        const countEl = group.querySelector('.rfm-sku-group-count');
+        if (countEl) {
+            countEl.textContent = `${remaining} SKU${remaining === 1 ? '' : 's'}`;
         }
+    };
+
+    const syncVisibleSkuTotals = () => {
+        const total = root.querySelectorAll('[data-rfm-sku]').length;
+        const hubCount = root.querySelector('#rfm-skus-heading')?.closest('div')?.querySelector('strong');
+        if (hubCount) {
+            hubCount.textContent = String(total);
+        }
+
+        const workspaceCount = root.querySelector('.rfm-skus-workspace-head em');
+        if (workspaceCount) {
+            workspaceCount.textContent = `${new Intl.NumberFormat().format(total)} SKU${total === 1 ? '' : 's'}`;
+        }
+    };
+
+    const findSkuListForProduct = (product) => {
+        const optionIds = (product.variant_option_ids || []).map((id) => String(id));
+        const group = [...root.querySelectorAll('[data-rfm-sku-group][data-rfm-sku-group-option-id]')]
+            .find((row) => optionIds.includes(String(row.dataset.rfmSkuGroupOptionId)));
+
+        return group?.querySelector('[data-rfm-list]') || root.querySelector('[data-rfm-list]');
+    };
+
+    const buildLiveSkuRow = (product) => {
+        const li = document.createElement('li');
+        li.className = 'rfm-sku rfm-sku-is-new';
+        li.dataset.rfmSku = '';
+        li.dataset.rfmProductId = String(product.id);
+        li.dataset.rfmStatus = product.status || 'draft';
+        li.dataset.rfmNeedsPrice = product.needs_price ? '1' : '0';
+        li.dataset.rfmNeedsBarcode = product.barcode ? '0' : '1';
+        li.dataset.rfmBarcode = product.barcode || '';
+        li.dataset.rfmDuplicateBarcode = '0';
+        li.dataset.rfmNeedsImage = '1';
+        li.dataset.rfmOutOfStock = '1';
+        li.dataset.rfmNotPos = '0';
+        li.dataset.rfmNotOnline = '0';
+        li.dataset.rfmNotInventory = '0';
+        li.dataset.rfmVariantOptions = (product.variant_option_ids || []).join(' ');
+        li.dataset.rfmVariantOptionsByGroup = JSON.stringify(product.variant_options_by_group || {});
+        li.dataset.rfmSearch = [
+            product.name,
+            product.sku,
+            product.barcode,
+            product.variants,
+            ...(product.variant_rows || []).map((row) => row.label),
+        ].filter(Boolean).join(' ').toLowerCase();
+
+        const details = document.createElement('details');
+        details.className = 'rfm-sku-card';
+
+        const summary = document.createElement('summary');
+        summary.className = 'rfm-sku-summary';
+
+        const thumb = document.createElement('div');
+        thumb.className = 'rfm-row-thumb';
+        const thumbButton = document.createElement('button');
+        thumbButton.type = 'button';
+        thumbButton.className = 'rfm-thumb-lightbox-trigger';
+        thumbButton.disabled = true;
+        thumbButton.setAttribute('aria-label', `Image pending for ${product.name}`);
+        thumbButton.innerHTML = '<span aria-hidden="true">?</span>';
+        thumb.append(thumbButton);
+
+        const name = document.createElement('div');
+        name.className = 'rfm-row-name';
+        const identity = document.createElement('div');
+        identity.className = 'rfm-row-identity';
+        const family = document.createElement('p');
+        family.className = 'rfm-row-family';
+        family.textContent = product.name || 'New sellable SKU';
+        identity.append(family);
+
+        if (Array.isArray(product.variant_rows) && product.variant_rows.length) {
+            const variants = document.createElement('ul');
+            variants.className = 'rfm-row-variant-list';
+            product.variant_rows.forEach((variant) => {
+                const item = document.createElement('li');
+                item.className = 'rfm-row-variant';
+                const axis = document.createElement('span');
+                axis.className = 'rfm-row-variant-axis';
+                axis.textContent = variant.group || 'Variant';
+                const value = document.createElement('span');
+                value.className = 'rfm-row-variant-value';
+                value.textContent = variant.label || '';
+                item.append(axis, value);
+                variants.append(item);
+            });
+            identity.append(variants);
+        }
+
+        const title = document.createElement('span');
+        title.className = 'rfm-row-title';
+        title.textContent = product.name || 'New sellable SKU';
+        const sub = document.createElement('span');
+        sub.className = 'rfm-row-sub';
+        sub.textContent = product.variants || product.sku || 'New SKU';
+        name.append(identity, title, sub);
+
+        const price = document.createElement('span');
+        price.className = `rfm-row-price ${product.needs_price ? 'is-missing' : ''}`;
+        price.textContent = product.needs_price ? '£?' : 'Priced';
+
+        const barcode = document.createElement('span');
+        barcode.className = `rfm-row-barcode ${product.barcode ? 'has-barcode' : ''}`;
+        barcode.textContent = product.barcode || '+ Add barcode';
+
+        const actions = document.createElement('div');
+        actions.className = 'rfm-sku-summary-actions';
+        const view = document.createElement('a');
+        view.className = 'rfm-row-view';
+        view.href = product.url || '#';
+        view.setAttribute('aria-label', `View sellable product page for ${product.name}`);
+        view.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.4-6 9.5-6 9.5 6 9.5 6-3.4 6-9.5 6-9.5-6-9.5-6Z"></path><circle cx="12" cy="12" r="3"></circle></svg><span class="rfm-row-view-label">View</span>';
+        const chevron = document.createElement('span');
+        chevron.className = 'rfm-row-chevron';
+        chevron.setAttribute('aria-hidden', 'true');
+        chevron.textContent = '›';
+        actions.append(view, chevron);
+
+        summary.append(thumb, name, price, barcode, actions);
+
+        const body = document.createElement('div');
+        body.className = 'rfm-sku-body';
+        const note = document.createElement('div');
+        note.className = 'rfm-panel';
+        const text = document.createElement('p');
+        text.className = 'page-note';
+        text.textContent = 'New sellable SKU created. Open the product page to add barcode, price, photos and stock details.';
+        note.append(text);
+        body.append(note);
+
+        details.append(summary, body);
+        li.append(details);
+
+        return li;
+    };
+
+    const appendCreatedSkuRows = (products = []) => {
+        if (!Array.isArray(products) || products.length === 0) return;
+
+        products.forEach((product) => {
+            if (!product?.id || root.querySelector(`[data-rfm-sku][data-rfm-product-id="${product.id}"]`)) {
+                return;
+            }
+
+            const list = findSkuListForProduct(product);
+            if (!list) return;
+
+            const row = buildLiveSkuRow(product);
+            list.append(row);
+            updateSkuGroupCount(row.closest('[data-rfm-sku-group]'));
+        });
+
+        syncVisibleSkuTotals();
+        applyFilters();
     };
 
     const ensureOptionInSelects = (groupId, option) => {
@@ -6264,7 +6405,7 @@ const initVariantModelChips = (root, csrf, showToast) => {
 
             syncChipSellableState(data.variant_option_sellable);
             updateCreateBar();
-            await refreshFamilySkuList();
+            appendCreatedSkuRows(data.products);
 
             const createdCount = Number(data.created_count) || 0;
             const skippedExisting = Number(data.skipped_existing) || 0;
