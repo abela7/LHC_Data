@@ -6762,15 +6762,18 @@ const initVariantModelChips = (root, csrf, showToast) => {
     //   mode 'sub'  (new Colour) -> "under which Length(s)?"  -> sends main_option_ids
     //   mode 'main' (new Length) -> "which Colour(s) under it?" -> sends sub_option_ids
     // Fired from Create sellable SKUs when scope is ambiguous (multiple mains/subs).
-    const showPlacementPicker = ({ optionIds, mode, anchorEl, label, covered = [] }) => {
+    const showPlacementPicker = ({ optionIds, mode, label, covered = [] }) => {
         closeLengthPicker();
 
         const isSub = mode === 'sub';
         const options = isSub ? mainAxisOptions : subAxisOptions;
         const axisName = isSub ? mainAxisName : subAxisName;
         const titleText = isSub
-            ? `Create “${label}” for which ${axisName}?`
-            : `Which ${axisName} go under “${label}”?`;
+            ? `Choose ${axisName}`
+            : `Choose ${axisName}`;
+        const subtitleText = isSub
+            ? `Where should “${label}” be added? Tap to select.`
+            : `Which values go under “${label}”? Tap to select.`;
 
         const backdrop = document.createElement('div');
         backdrop.className = 'rfm-length-picker-backdrop';
@@ -6779,49 +6782,121 @@ const initVariantModelChips = (root, csrf, showToast) => {
         pop.className = 'rfm-length-picker';
         pop.setAttribute('role', 'dialog');
         pop.setAttribute('aria-modal', 'true');
+        pop.setAttribute('aria-labelledby', 'rfm-length-picker-title');
 
-        const header = document.createElement('div');
+        const grab = document.createElement('div');
+        grab.className = 'rfm-length-picker-grab';
+        grab.setAttribute('aria-hidden', 'true');
+        pop.append(grab);
+
+        const header = document.createElement('header');
         header.className = 'rfm-length-picker-header';
 
         const title = document.createElement('h2');
+        title.id = 'rfm-length-picker-title';
         title.className = 'rfm-length-picker-title';
         title.textContent = titleText;
 
-        const hint = document.createElement('p');
-        hint.className = 'rfm-length-picker-hint';
-        hint.textContent = options.length > 8
-            ? `Scroll to see all ${options.length} values. Tick those to include.`
-            : 'Tick the values to include, then continue.';
+        const subtitle = document.createElement('p');
+        subtitle.className = 'rfm-length-picker-subtitle';
+        subtitle.textContent = subtitleText;
 
-        header.append(title, hint);
-        pop.appendChild(header);
+        header.append(title, subtitle);
+        pop.append(header);
 
-        const list = document.createElement('div');
-        list.className = 'rfm-length-picker-list';
+        const toolbar = document.createElement('div');
+        toolbar.className = 'rfm-length-picker-toolbar';
+
+        const searchWrap = document.createElement('div');
+        searchWrap.className = 'rfm-length-picker-search';
+        const searchIcon = document.createElement('span');
+        searchIcon.className = 'rfm-length-picker-search-icon';
+        searchIcon.setAttribute('aria-hidden', 'true');
+        searchIcon.textContent = '⌕';
+        const searchInput = document.createElement('input');
+        searchInput.type = 'search';
+        searchInput.className = 'rfm-length-picker-search-input';
+        searchInput.placeholder = `Search ${axisName.toLowerCase()}…`;
+        searchInput.setAttribute('autocomplete', 'off');
+        searchInput.setAttribute('enterkeyhint', 'search');
+        searchWrap.append(searchIcon, searchInput);
+
+        const bulk = document.createElement('div');
+        bulk.className = 'rfm-length-picker-bulk';
+        const selectAllBtn = document.createElement('button');
+        selectAllBtn.type = 'button';
+        selectAllBtn.className = 'rfm-length-picker-bulk-btn';
+        selectAllBtn.textContent = 'Select all';
+        const clearBtn = document.createElement('button');
+        clearBtn.type = 'button';
+        clearBtn.className = 'rfm-length-picker-bulk-btn';
+        clearBtn.textContent = 'Clear';
+        const countEl = document.createElement('span');
+        countEl.className = 'rfm-length-picker-count';
+        bulk.append(selectAllBtn, clearBtn, countEl);
+        toolbar.append(searchWrap, bulk);
+        pop.append(toolbar);
+
+        const body = document.createElement('div');
+        body.className = 'rfm-length-picker-body';
+
+        const grid = document.createElement('div');
+        grid.className = 'rfm-length-picker-grid';
+        grid.setAttribute('role', 'group');
+        grid.setAttribute('aria-label', `${axisName} options`);
+
+        const chips = [];
         options.forEach((opt) => {
             const exists = isSub && covered.includes(Number(opt.id));
-            const row = document.createElement('label');
-            row.className = 'rfm-length-picker-row' + (exists ? ' is-covered' : '');
-            const cb = document.createElement('input');
-            cb.type = 'checkbox';
-            cb.value = String(opt.id);
-            cb.checked = !exists; // new main: all checked; sub: only missing mains
-            const name = document.createElement('span');
-            name.className = 'rfm-length-picker-row-label';
-            name.textContent = opt.label;
-            name.title = opt.label;
-            if (isSub) {
-                const note = document.createElement('em');
-                note.textContent = exists ? 'exists' : 'new';
-                row.append(cb, name, note);
-            } else {
-                row.append(cb, name);
+            const chip = document.createElement('button');
+            chip.type = 'button';
+            chip.className = 'rfm-placement-chip'
+                + (exists ? ' is-existing' : ' is-selected');
+            chip.dataset.optionId = String(opt.id);
+            chip.dataset.searchLabel = String(opt.label || '').toLowerCase();
+            chip.setAttribute('aria-pressed', exists ? 'false' : 'true');
+            if (exists) {
+                chip.disabled = true;
             }
-            list.appendChild(row);
-        });
-        pop.appendChild(list);
 
-        const actions = document.createElement('div');
+            const check = document.createElement('span');
+            check.className = 'rfm-placement-chip-check';
+            check.setAttribute('aria-hidden', 'true');
+
+            const chipLabel = document.createElement('span');
+            chipLabel.className = 'rfm-placement-chip-label';
+            chipLabel.textContent = opt.label;
+
+            chip.append(check, chipLabel);
+
+            if (isSub) {
+                const badge = document.createElement('span');
+                badge.className = 'rfm-placement-chip-badge';
+                badge.textContent = exists ? 'Has SKU' : 'New';
+                chip.append(badge);
+            }
+
+            chip.addEventListener('click', () => {
+                if (chip.disabled) {
+                    return;
+                }
+                const selected = !chip.classList.contains('is-selected');
+                chip.classList.toggle('is-selected', selected);
+                chip.setAttribute('aria-pressed', selected ? 'true' : 'false');
+                syncPlacementPickerUi();
+            });
+
+            chips.push(chip);
+            grid.append(chip);
+        });
+
+        const empty = document.createElement('p');
+        empty.className = 'rfm-length-picker-empty';
+        empty.textContent = 'No matches — try another search.';
+        body.append(grid, empty);
+        pop.append(body);
+
+        const actions = document.createElement('footer');
         actions.className = 'rfm-length-picker-actions';
         const cancel = document.createElement('button');
         cancel.type = 'button';
@@ -6832,11 +6907,53 @@ const initVariantModelChips = (root, csrf, showToast) => {
         create.className = 'rfm-length-picker-create';
         create.textContent = 'Continue';
         actions.append(cancel, create);
-        pop.appendChild(actions);
+        pop.append(actions);
+
+        const selectableChips = () => chips.filter((chip) => !chip.disabled && !chip.classList.contains('is-hidden'));
+        const selectedChips = () => selectableChips().filter((chip) => chip.classList.contains('is-selected'));
+        const visibleChips = () => chips.filter((chip) => !chip.classList.contains('is-hidden'));
+
+        const syncPlacementPickerUi = () => {
+            const selected = selectedChips().length;
+            const visible = visibleChips().length;
+            countEl.textContent = visible === options.length
+                ? `${selected} selected`
+                : `${selected} of ${visible} shown`;
+            create.textContent = selected === 1 ? 'Continue · 1' : `Continue · ${selected}`;
+            create.disabled = selected === 0;
+            empty.classList.toggle('is-visible', visible === 0);
+            grid.hidden = visible === 0;
+        };
+
+        const applySearch = () => {
+            const needle = (searchInput.value || '').trim().toLowerCase();
+            chips.forEach((chip) => {
+                const matches = !needle || (chip.dataset.searchLabel || '').includes(needle);
+                chip.classList.toggle('is-hidden', !matches);
+            });
+            syncPlacementPickerUi();
+        };
+
+        searchInput.addEventListener('input', applySearch);
+        selectAllBtn.addEventListener('click', () => {
+            visibleChips().forEach((chip) => {
+                chip.classList.add('is-selected');
+                chip.setAttribute('aria-pressed', 'true');
+            });
+            syncPlacementPickerUi();
+        });
+        clearBtn.addEventListener('click', () => {
+            selectableChips().forEach((chip) => {
+                chip.classList.remove('is-selected');
+                chip.setAttribute('aria-pressed', 'false');
+            });
+            syncPlacementPickerUi();
+        });
 
         backdrop.appendChild(pop);
         document.body.appendChild(backdrop);
         document.body.classList.add('rfm-picker-open');
+        syncPlacementPickerUi();
 
         const onKeydown = (event) => {
             if (event.key === 'Escape') {
@@ -6849,9 +6966,9 @@ const initVariantModelChips = (root, csrf, showToast) => {
             if (e.target === backdrop) closeLengthPicker();
         });
         cancel.addEventListener('click', closeLengthPicker);
-        create.focus();
+        searchInput.focus();
         create.addEventListener('click', async () => {
-            const chosen = [...pop.querySelectorAll('input[type=checkbox]:checked')].map((c) => Number(c.value));
+            const chosen = selectedChips().map((chip) => Number(chip.dataset.optionId));
             closeLengthPicker();
             if (!chosen.length) return;
             if (isSub) {
