@@ -3089,7 +3089,90 @@ const initRetailFamilyManager = () => {
         }
     };
 
+    let activeVariantVchipOptionId = null;
+
+    const syncVariantVchipSelection = () => {
+        root.querySelectorAll('[data-rfm-vchip].is-ready').forEach((chip) => {
+            const isActive = activeVariantVchipOptionId !== null
+                && String(chip.dataset.optionId) === String(activeVariantVchipOptionId);
+            chip.classList.toggle('is-selected', isActive);
+            chip.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+        });
+    };
+
+    const revealSkusForVariantOption = (detail = {}) => {
+        const optionId = String(detail.optionId || '');
+        const groupId = String(detail.groupId || '');
+        const groupName = String(detail.groupName || '').trim();
+        const label = String(detail.label || '').trim();
+        const toggle = detail.toggle !== false;
+
+        if (!optionId) {
+            return;
+        }
+
+        if (toggle && String(activeVariantVchipOptionId) === optionId) {
+            activeVariantVchipOptionId = null;
+            if (groupId) {
+                activeVariantByAxis.delete(groupId);
+            }
+        } else {
+            activeVariantVchipOptionId = optionId;
+            activeVariantByAxis.clear();
+            if (groupId) {
+                activeVariantByAxis.set(groupId, new Set([optionId]));
+            }
+        }
+
+        variantFilterChips.forEach((chip) => {
+            const chipAxis = chip.dataset.rfmFilterAxis || '';
+            const chipOpt = chip.dataset.rfmFilterVariant || '';
+            const axisSet = activeVariantByAxis.get(chipAxis);
+            setChipPressed(chip, Boolean(axisSet?.has(chipOpt)));
+        });
+
+        searchTerm = '';
+        if (searchInput) {
+            searchInput.value = '';
+        }
+
+        syncVariantVchipSelection();
+        applyFilters();
+
+        const visibleItems = [...getSkuItems()].filter((item) => !item.hidden);
+        const axisLabel = groupName && label ? `${groupName}: ${label}` : (label || 'variant');
+
+        showToast(
+            visibleItems.length > 0
+                ? `Showing ${visibleItems.length} SKU${visibleItems.length === 1 ? '' : 's'} for ${axisLabel}`
+                : `No SKUs found for ${axisLabel}`,
+            visibleItems.length === 0,
+        );
+
+        const workspace = document.getElementById('rfm-skus-workspace');
+        workspace?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+        root.querySelectorAll('[data-rfm-sku]').forEach((row) => {
+            const ids = (row.dataset.rfmVariantOptions || '').split(/\s+/).filter(Boolean);
+            const hit = ids.includes(optionId);
+            row.classList.toggle('rfm-sku-is-highlighted', hit && !row.hidden);
+            if (hit && !row.hidden) {
+                row.closest('details')?.setAttribute('open', '');
+                row.closest('[data-rfm-sku-group]')?.setAttribute('open', '');
+            }
+        });
+
+        if (activeVariantVchipOptionId !== null) {
+            root.querySelector('[data-rfm-filters-panel]')?.setAttribute('open', '');
+        }
+    };
+
+    root.addEventListener('rfm-show-skus-for-variant-option', (event) => {
+        revealSkusForVariantOption(event.detail || {});
+    });
+
     const clearAllFilters = () => {
+        activeVariantVchipOptionId = null;
         activeVariantByAxis.clear();
         activeStatuses.clear();
         activeChannels.clear();
@@ -3097,6 +3180,10 @@ const initRetailFamilyManager = () => {
         activeQuality.clear();
         root.querySelectorAll('.rfm-filter-chip[aria-pressed="true"]').forEach((chip) => {
             setChipPressed(chip, false);
+        });
+        syncVariantVchipSelection();
+        root.querySelectorAll('[data-rfm-sku].rfm-sku-is-highlighted').forEach((row) => {
+            row.classList.remove('rfm-sku-is-highlighted');
         });
         applyFilters();
     };
@@ -5865,8 +5952,11 @@ const initVariantModelChips = (root, csrf, showToast) => {
                 status.textContent = 'Pending';
             } else {
                 status.className = 'rfm-vchip-ready';
-                status.title = 'Sellable SKU exists for this value';
-                status.textContent = 'Ready';
+                status.title = 'Show SKUs for this value';
+                status.textContent = 'View SKUs';
+                chip.setAttribute('role', 'button');
+                chip.setAttribute('tabindex', '0');
+                chip.setAttribute('aria-pressed', 'false');
             }
         });
     };
@@ -5940,38 +6030,24 @@ const initVariantModelChips = (root, csrf, showToast) => {
     };
 
     const focusSkuListForOptions = (optionIds) => {
-        const idSet = new Set(optionIds.map((id) => String(id)));
-        if (!idSet.size) return;
-
-        const workspace = document.getElementById('rfm-skus-workspace');
-        workspace?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-
-        root.querySelectorAll('[data-rfm-sku-group]').forEach((group) => {
-            const groupOptionId = group.dataset.rfmSkuGroupOptionId;
-            if (groupOptionId && idSet.has(String(groupOptionId))) {
-                group.open = true;
-            }
-        });
-
-        const searchLabel = [...idSet]
-            .map((id) => root.querySelector(`[data-rfm-vchip][data-option-id="${id}"]`)?.dataset.chipLabel)
-            .find(Boolean);
-
-        const searchInput = root.querySelector('[data-rfm-search]');
-        if (searchInput && searchLabel) {
-            searchInput.value = searchLabel;
-            searchInput.dispatchEvent(new Event('input', { bubbles: true }));
+        const firstId = optionIds.map((id) => String(id)).find(Boolean);
+        if (!firstId) {
+            return;
         }
 
-        root.querySelectorAll('[data-rfm-sku]').forEach((row) => {
-            const ids = (row.dataset.rfmVariantOptions || '').split(/\s+/).filter(Boolean);
-            const hit = ids.some((id) => idSet.has(id));
-            row.classList.toggle('rfm-sku-is-highlighted', hit);
-            if (hit) {
-                row.closest('details')?.setAttribute('open', '');
-                row.closest('.rfm-sku-group')?.setAttribute('open', '');
-            }
-        });
+        const chip = root.querySelector(`[data-rfm-vchip][data-option-id="${firstId}"]`);
+        const field = chip?.closest('[data-rfm-variant-chip-field]');
+
+        root.dispatchEvent(new CustomEvent('rfm-show-skus-for-variant-option', {
+            bubbles: true,
+            detail: {
+                optionId: firstId,
+                groupId: chip?.dataset.groupId || field?.dataset.groupId || '',
+                groupName: field?.dataset.groupName || '',
+                label: chip?.dataset.chipLabel || '',
+                toggle: false,
+            },
+        }));
     };
 
     const refreshFamilySkuList = async () => {
@@ -6053,8 +6129,13 @@ const initVariantModelChips = (root, csrf, showToast) => {
         status.className = missing > 0 ? 'rfm-vchip-pending' : 'rfm-vchip-ready';
         status.title = missing > 0
             ? 'Sellable SKU not created yet'
-            : 'Sellable SKU exists for this value';
-        status.textContent = missing > 0 ? 'Pending' : 'Ready';
+            : 'Show SKUs for this value';
+        status.textContent = missing > 0 ? 'Pending' : 'View SKUs';
+        if (missing === 0) {
+            chip.setAttribute('role', 'button');
+            chip.setAttribute('tabindex', '0');
+            chip.setAttribute('aria-pressed', 'false');
+        }
         chip.append(status);
 
         const deleteBtn = document.createElement('button');
@@ -6239,7 +6320,37 @@ const initVariantModelChips = (root, csrf, showToast) => {
         consumeChipInput(input, true);
     });
 
+    root.addEventListener('keydown', (event) => {
+        const readyChip = event.target.closest('[data-rfm-vchip].is-ready[role="button"]');
+        if (!readyChip || (event.key !== 'Enter' && event.key !== ' ')) {
+            return;
+        }
+        event.preventDefault();
+        showSkusForReadyChip(readyChip);
+    });
+
+    const showSkusForReadyChip = (chip) => {
+        const field = chip.closest('[data-rfm-variant-chip-field]');
+        root.dispatchEvent(new CustomEvent('rfm-show-skus-for-variant-option', {
+            bubbles: true,
+            detail: {
+                optionId: chip.dataset.optionId,
+                groupId: chip.dataset.groupId || field?.dataset.groupId || '',
+                groupName: field?.dataset.groupName || '',
+                label: chip.dataset.chipLabel || chip.querySelector('.rfm-vchip-label')?.textContent?.trim() || '',
+                toggle: true,
+            },
+        }));
+    };
+
     root.addEventListener('click', async (event) => {
+        const readyChip = event.target.closest('[data-rfm-vchip].is-ready');
+        if (readyChip && !event.target.closest('[data-rfm-vchip-delete]')) {
+            event.preventDefault();
+            showSkusForReadyChip(readyChip);
+            return;
+        }
+
         const pendingChip = event.target.closest('[data-rfm-vchip].needs-sku');
         if (pendingChip && !event.target.closest('[data-rfm-vchip-delete]') && createNewSkusUrl) {
             event.preventDefault();

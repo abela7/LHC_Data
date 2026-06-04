@@ -10642,8 +10642,25 @@
     }
 
     .rfm-vchip.is-ready {
+        cursor: pointer;
         border-color: #cfe1d3;
         background: #f5fbf7;
+    }
+
+    .rfm-vchip.is-ready:hover {
+        border-color: rgba(29, 111, 95, 0.45);
+        background: #e8f5f0;
+    }
+
+    .rfm-vchip.is-ready.is-selected {
+        border-color: var(--color-accent);
+        background: #dff3eb;
+        box-shadow: 0 0 0 2px rgba(29, 111, 95, 0.25);
+    }
+
+    .rfm-vchip.is-ready .rfm-vchip-ready {
+        font-weight: 700;
+        color: #1d6f5f;
     }
 
     .rfm-vchip.is-pending {

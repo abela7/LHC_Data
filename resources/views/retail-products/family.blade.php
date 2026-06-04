@@ -515,13 +515,20 @@
                                             <span class="rfm-vchip {{ $sellable['missing'] > 0 ? 'needs-sku' : 'is-ready' }}"
                                                   data-rfm-vchip
                                                   data-option-id="{{ $option->id }}"
+                                                  data-group-id="{{ $group->id }}"
                                                   data-chip-label="{{ $option->label }}"
-                                                  data-rfm-missing="{{ $sellable['missing'] }}">
+                                                  data-rfm-missing="{{ $sellable['missing'] }}"
+                                                  @if ($sellable['missing'] === 0)
+                                                      role="button"
+                                                      tabindex="0"
+                                                      aria-pressed="false"
+                                                      title="Show sellable SKUs that use {{ $group->name }}: {{ $option->label }}"
+                                                  @endif>
                                                 <span class="rfm-vchip-label">{{ $option->label }}</span>
                                                 @if ($sellable['missing'] > 0)
                                                     <span class="rfm-vchip-pending" title="Click to create sellable SKUs for this value">Pending</span>
                                                 @else
-                                                    <span class="rfm-vchip-ready" title="Sellable SKU exists for this value">Ready</span>
+                                                    <span class="rfm-vchip-ready" title="Show SKUs for this value">View SKUs</span>
                                                 @endif
                                                 <button type="button"
                                                         class="rfm-vchip-delete"
