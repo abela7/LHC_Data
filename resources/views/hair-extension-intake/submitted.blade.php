@@ -59,6 +59,47 @@
                 text-decoration:none;
             }
             .his-btn.primary { border-color:var(--hei-accent); background:var(--hei-accent); color:#fffaf3; }
+            .his-filters {
+                display:flex;
+                flex-wrap:wrap;
+                align-items:flex-end;
+                gap:.75rem 1rem;
+                border:1px solid var(--hei-edge);
+                border-radius:22px;
+                background:var(--hei-card);
+                padding:1rem 1.1rem;
+                box-shadow:0 8px 25px rgba(31,36,33,.04);
+            }
+            .his-filters-field {
+                display:flex;
+                flex-direction:column;
+                gap:.35rem;
+                min-width:min(100%, 200px);
+                flex:1 1 180px;
+            }
+            .his-filters-field span {
+                color:var(--hei-muted);
+                font-size:.72rem;
+                font-weight:900;
+                letter-spacing:.08em;
+                text-transform:uppercase;
+            }
+            .his-filters-field select {
+                min-height:44px;
+                border:1px solid var(--hei-edge);
+                border-radius:14px;
+                background:#fffdf8;
+                color:var(--hei-ink);
+                padding:.55rem .75rem;
+                font-size:.92rem;
+                font-weight:700;
+            }
+            .his-filters-actions {
+                display:flex;
+                flex-wrap:wrap;
+                gap:.5rem;
+                align-items:center;
+            }
             .his-stats {
                 display:grid;
                 grid-template-columns:repeat(3,minmax(0,1fr));
@@ -569,6 +610,53 @@
             </div>
         </section>
 
+        <form method="GET" action="{{ route('hair-extension-intake.submitted') }}" class="his-filters">
+            @if ($includeDrafts)
+                <input type="hidden" name="include_drafts" value="1">
+            @endif
+            <label class="his-filters-field">
+                <span>Brand</span>
+                <select name="brand">
+                    <option value="">All brands</option>
+                    @foreach ($filterBrands as $option)
+                        <option value="{{ $option['label'] }}" @selected($filterBrand === $option['label'])>
+                            {{ $option['label'] }} ({{ number_format($option['count']) }})
+                        </option>
+                    @endforeach
+                </select>
+            </label>
+            <label class="his-filters-field">
+                <span>Product type</span>
+                <select name="product_type">
+                    <option value="">All product types</option>
+                    @foreach ($filterProductTypes as $option)
+                        <option value="{{ $option['label'] }}" @selected($filterProductType === $option['label'])>
+                            {{ $option['label'] }} ({{ number_format($option['count']) }})
+                        </option>
+                    @endforeach
+                </select>
+            </label>
+            <label class="his-filters-field">
+                <span>Style / family</span>
+                <select name="style">
+                    <option value="">All styles</option>
+                    @foreach ($filterStyles as $option)
+                        <option value="{{ $option['label'] }}" @selected($filterStyle === $option['label'])>
+                            {{ $option['label'] }} ({{ number_format($option['count']) }})
+                        </option>
+                    @endforeach
+                </select>
+            </label>
+            <div class="his-filters-actions">
+                <button type="submit" class="his-btn primary">Apply filters</button>
+                @if ($hasActiveFilters)
+                    <a class="his-btn" href="{{ $includeDrafts ? route('hair-extension-intake.submitted', ['include_drafts' => 1]) : route('hair-extension-intake.submitted') }}">
+                        Clear filters
+                    </a>
+                @endif
+            </div>
+        </form>
+
         <section class="his-brand his-recent-section">
             <header class="his-brand-head">
                 <h2>Recent drafts &amp; submissions</h2>
@@ -882,7 +970,9 @@
             </section>
         @empty
             <div class="his-empty">
-                @if ($includeDrafts)
+                @if ($hasActiveFilters)
+                    No {{ $includeDrafts ? 'drafts' : 'submitted products' }} match these filters. Try different brand, product type, or style values, or clear filters to see everything.
+                @elseif ($includeDrafts)
                     No submitted products or drafts yet. Start a new intake from your phone, then it will appear here when it has at least a brand.
                 @else
                     No submitted products yet. Submit product observations from the intake page, then they will appear here grouped by brand. Use "Show drafts" if you want to review unfinished records.

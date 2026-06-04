@@ -165,7 +165,8 @@
              data-rfm-display-name-url="{{ route('retail-products.families.display-name.update', $family) }}"
              data-rfm-variant-options-bulk-url="{{ route('retail-products.families.variant-options.bulk-store', $family) }}"
              data-rfm-variant-options-destroy-url-template="{{ route('retail-products.families.variant-options.destroy', [$family, 0]) }}"
-             data-rfm-create-new-skus-url="{{ route('retail-products.families.variant-options.create-skus-for-new', $family) }}">
+             data-rfm-create-new-skus-url="{{ route('retail-products.families.variant-options.create-skus-for-new', $family) }}"
+             data-rfm-main-axis-options='@json($mainAxisPicker["options"] ?? [])'>
         <nav class="rfm-crumbs" aria-label="Breadcrumb">
             <a href="{{ route('brand-catalogue.index') }}">Catalogue</a>
             <span aria-hidden="true">›</span>
@@ -529,7 +530,8 @@
                                 <div class="rfm-variant-chip-field"
                                      data-rfm-variant-chip-field
                                      data-group-id="{{ $group->id }}"
-                                     data-group-name="{{ $group->name }}">
+                                     data-group-name="{{ $group->name }}"
+                                     data-group-role="{{ $group->axis_role ?? '' }}">
                                     <p class="rfm-variant-chip-intro">Type values — <strong>comma</strong> or <strong>Enter</strong> saves each one in the background.</p>
                                     <div class="rfm-variant-chip-box">
                                         @foreach ($group->options as $option)
@@ -542,6 +544,7 @@
                                                   data-group-id="{{ $group->id }}"
                                                   data-chip-label="{{ $option->label }}"
                                                   data-rfm-missing="{{ $sellable['missing'] }}"
+                                                  data-rfm-covered-mains='@json($mainAxisPicker["coverage"][$option->id] ?? [])'
                                                   @if ($sellable['missing'] === 0)
                                                       role="button"
                                                       tabindex="0"
@@ -1048,15 +1051,6 @@
                     <button type="button" class="rfm-sku-groups-toggle" data-rfm-sku-groups-collapse-all>
                         Collapse all
                     </button>
-                    <form method="POST"
-                          action="{{ route('retail-products.families.split-families', $family) }}"
-                          class="rfm-sku-groups-split-all"
-                          onsubmit="return confirm(@js('Create '.$skuGroups->count().' separate families (one per group)? Each keeps the same brand and style; SKUs move out of this family. This cannot be undone.'));">
-                        @csrf
-                        <button type="submit" class="rfm-sku-groups-toggle rfm-sku-groups-split-all-btn">
-                            Split into families
-                        </button>
-                    </form>
                 </div>
             @endif
 

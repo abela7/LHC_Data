@@ -17,9 +17,11 @@ use App\Services\ImageWatermarker;
 use App\Services\OpenRouterProductLookupService;
 use App\Services\OpenRouterPackagingTextService;
 use App\Support\ProductImageNamer;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -566,8 +568,32 @@ class HairExtensionIntakeController extends Controller
     public function submitted(Request $request): View
     {
         $showDraftsOnly = $request->boolean('drafts_only') || $request->boolean('include_drafts');
+        $filterBrand = trim((string) $request->query('brand', ''));
+        $filterProductType = trim((string) $request->query('product_type', ''));
+        $filterStyle = trim((string) $request->query('style', ''));
 
-        $query = HairExtensionIntake::query()
+        $filterSourceRows = $this->submittedIntakeBaseQuery($showDraftsOnly)
+            ->with([
+                'productType:id,name',
+                'style:id,name',
+            ])
+            ->get([
+                'id',
+                'brand_name',
+                'product_type_name',
+                'style_name',
+                'brand_catalogue_product_type_id',
+                'brand_catalogue_style_id',
+                'variant_structure',
+            ]);
+
+        $filterOptions = $this->submittedIntakeFilterOptions(
+            $filterSourceRows,
+            $filterBrand,
+            $filterProductType,
+        );
+
+        $query = $this->submittedIntakeBaseQuery($showDraftsOnly)
             ->with([
                 'brand.catalogue',
                 'productType.line.brand.catalogue',
@@ -578,19 +604,27 @@ class HairExtensionIntakeController extends Controller
                 'section',
                 'subsection',
             ])
-            ->where(function ($query): void {
-                $query
-                    ->whereNotNull('brand_catalogue_brand_id')
-                    ->orWhere(fn ($inner) => $inner
-                        ->whereNotNull('brand_name')
-                        ->where('brand_name', '!=', '')
-                    );
+            ->when($filterBrand !== '', fn (Builder $query) => $query->where('brand_name', $filterBrand))
+            ->when($filterProductType !== '', function (Builder $query) use ($filterProductType): void {
+                $query->where(function (Builder $inner) use ($filterProductType): void {
+                    $inner
+                        ->where('product_type_name', $filterProductType)
+                        ->orWhereHas(
+                            'productType',
+                            fn (Builder $productType) => $productType->where('name', $filterProductType),
+                        );
+                });
             })
-            ->when(
-                $showDraftsOnly,
-                fn ($query) => $query->where('status', 'draft'),
-                fn ($query) => $query->where('status', 'submitted'),
-            )
+            ->when($filterStyle !== '', function (Builder $query) use ($filterStyle): void {
+                $query->where(function (Builder $inner) use ($filterStyle): void {
+                    $inner
+                        ->where('style_name', $filterStyle)
+                        ->orWhereHas(
+                            'style',
+                            fn (Builder $style) => $style->where('name', $filterStyle),
+                        );
+                });
+            })
             ->latest('submitted_at')
             ->latest('last_synced_at');
 
@@ -644,6 +678,10 @@ class HairExtensionIntakeController extends Controller
             ->groupBy(fn (HairExtensionIntake $intake) => $intake->brand_name ?: 'Unknown brand')
             ->sortKeys();
 
+        $hasActiveFilters = $filterBrand !== ''
+            || $filterProductType !== ''
+            || $filterStyle !== '';
+
         return view('hair-extension-intake.submitted', [
             'groupedByBrand' => $groupedByBrand,
             'submittedIntakes' => $intakes,
@@ -654,6 +692,13 @@ class HairExtensionIntakeController extends Controller
             'exportUrl' => route('hair-extension-intake.export-json'),
             'intakeUrl' => route('hair-extension-intake.index'),
             'submittedUrl' => route('hair-extension-intake.submitted'),
+            'filterBrand' => $filterBrand,
+            'filterProductType' => $filterProductType,
+            'filterStyle' => $filterStyle,
+            'filterBrands' => $filterOptions['brands'],
+            'filterProductTypes' => $filterOptions['product_types'],
+            'filterStyles' => $filterOptions['styles'],
+            'hasActiveFilters' => $hasActiveFilters,
         ]);
     }
 
@@ -1689,5 +1734,105 @@ class HairExtensionIntakeController extends Controller
             'sort_order' => $photo->sort_order,
             'created_at' => $photo->created_at?->toDateTimeString(),
         ])->values()->all();
+    }
+
+    private function submittedIntakeBaseQuery(bool $showDraftsOnly): Builder
+    {
+        return HairExtensionIntake::query()
+            ->where(function (Builder $query): void {
+                $query
+                    ->whereNotNull('brand_catalogue_brand_id')
+                    ->orWhere(fn (Builder $inner) => $inner
+                        ->whereNotNull('brand_name')
+                        ->where('brand_name', '!=', '')
+                    );
+            })
+            ->when(
+                $showDraftsOnly,
+                fn (Builder $query) => $query->where('status', 'draft'),
+                fn (Builder $query) => $query->where('status', 'submitted'),
+            );
+    }
+
+    /**
+     * @param  Collection<int, HairExtensionIntake>  $rows
+     * @return array{brands: Collection<int, array{label: string, count: int}>, product_types: Collection<int, array{label: string, count: int}>, styles: Collection<int, array{label: string, count: int}>}
+     */
+    private function submittedIntakeFilterOptions(
+        Collection $rows,
+        string $filterBrand,
+        string $filterProductType,
+    ): array {
+        $brandRows = $rows;
+
+        $productTypeRows = $filterBrand === ''
+            ? $rows
+            : $rows->filter(fn (HairExtensionIntake $intake): bool => ($intake->brand_name ?: '') === $filterBrand);
+
+        $styleRows = $productTypeRows;
+        if ($filterBrand !== '') {
+            $styleRows = $styleRows->filter(fn (HairExtensionIntake $intake): bool => ($intake->brand_name ?: '') === $filterBrand);
+        }
+        if ($filterProductType !== '') {
+            $styleRows = $styleRows->filter(
+                fn (HairExtensionIntake $intake): bool => $this->intakeProductTypeLabel($intake) === $filterProductType,
+            );
+        }
+
+        return [
+            'brands' => $this->submittedIntakeFilterOptionList(
+                $brandRows,
+                fn (HairExtensionIntake $intake): ?string => filled($intake->brand_name) ? $intake->brand_name : null,
+            ),
+            'product_types' => $this->submittedIntakeFilterOptionList(
+                $productTypeRows,
+                fn (HairExtensionIntake $intake): ?string => $this->intakeProductTypeLabel($intake),
+            ),
+            'styles' => $this->submittedIntakeFilterOptionList(
+                $styleRows,
+                fn (HairExtensionIntake $intake): ?string => $this->intakeStyleLabel($intake),
+            ),
+        ];
+    }
+
+    /**
+     * @param  Collection<int, HairExtensionIntake>  $rows
+     * @param  callable(HairExtensionIntake): (?string)  $labelResolver
+     * @return Collection<int, array{label: string, count: int}>
+     */
+    private function submittedIntakeFilterOptionList(Collection $rows, callable $labelResolver): Collection
+    {
+        return $rows
+            ->map(fn (HairExtensionIntake $intake): ?string => $labelResolver($intake))
+            ->filter()
+            ->countBy()
+            ->map(fn (int $count, string $label): array => ['label' => $label, 'count' => $count])
+            ->sortBy('label', SORT_NATURAL | SORT_FLAG_CASE)
+            ->values();
+    }
+
+    private function intakeProductTypeLabel(HairExtensionIntake $intake): ?string
+    {
+        if ($intake->productType?->name) {
+            return $intake->productType->name;
+        }
+
+        $variantStructure = is_array($intake->variant_structure) ? $intake->variant_structure : [];
+        $isTextV2 = ($variantStructure['source'] ?? null) === 'text_note_v2';
+
+        if ($isTextV2 && filled($intake->product_type_name)) {
+            return $intake->product_type_name;
+        }
+
+        return filled($intake->product_type_name) ? $intake->product_type_name : null;
+    }
+
+    private function intakeStyleLabel(HairExtensionIntake $intake): ?string
+    {
+        if (filled($intake->style_name)) {
+            return $intake->style_name;
+        }
+
+        return $intake->style?->name;
     }
 }

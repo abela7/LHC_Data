@@ -10,6 +10,7 @@ use App\Models\ProductFamily;
 use App\Models\ProductVariantGroup;
 use App\Models\ProductVariantOption;
 use App\Models\ProductVariantValue;
+use App\Support\RetailFamilySellableCombinations;
 use App\Support\RetailFamilyVariantAxes;
 use Illuminate\Support\Collection;
 use ReflectionMethod;
@@ -88,6 +89,45 @@ final class RetailFamilyRoleModelTest extends TestCase
 
         $this->assertSame('Poppin Twist - 20" - Grey - 3x', $name);
         $this->assertStringNotContainsString('3X', $name, 'Case-variant duplicate count label must be deduped.');
+    }
+
+    public function test_new_sub_value_can_be_restricted_to_one_main(): void
+    {
+        $family = new ProductFamily(['id' => 1, 'family_name' => 'Poppin Twist']);
+        $length = new ProductVariantGroup(['id' => 1, 'name' => 'Length', 'variant_type' => 'measurement', 'sort_order' => 1, 'axis_role' => 'main']);
+        $colour = new ProductVariantGroup(['id' => 2, 'name' => 'Colour', 'variant_type' => 'colour_name', 'sort_order' => 2, 'axis_role' => 'sub_main']);
+        $bundle = new ProductVariantGroup(['id' => 3, 'name' => 'Bundle', 'variant_type' => 'count', 'sort_order' => 3, 'axis_role' => 'common']);
+
+        $len16 = new ProductVariantOption(['id' => 101, 'product_variant_group_id' => 1, 'label' => '16"']);
+        $len20 = new ProductVariantOption(['id' => 102, 'product_variant_group_id' => 1, 'label' => '20"']);
+        $colA = new ProductVariantOption(['id' => 201, 'product_variant_group_id' => 2, 'label' => '4']);
+        $colNew = new ProductVariantOption(['id' => 202, 'product_variant_group_id' => 2, 'label' => 'Pink']);
+        $bundle3x = new ProductVariantOption(['id' => 301, 'product_variant_group_id' => 3, 'label' => '3x']);
+
+        $length->setRelation('options', collect([$len16, $len20]));
+        $colour->setRelation('options', collect([$colA, $colNew]));
+        $bundle->setRelation('options', collect([$bundle3x]));
+        $family->setRelation('variantGroups', collect([$length, $colour, $bundle]));
+
+        // Existing colour 4 already exists in BOTH lengths.
+        $family->setRelation('products', collect([
+            $this->makeProduct(1, [1 => $len16, 2 => $colA, 3 => $bundle3x]),
+            $this->makeProduct(2, [1 => $len20, 2 => $colA, 3 => $bundle3x]),
+        ]));
+
+        // Restricted to 20" -> exactly one combo, length 20".
+        $restricted = RetailFamilySellableCombinations::forNewVariantOptions($family, collect([202]), [102]);
+        $this->assertCount(1, $restricted);
+        $byGroup = collect($restricted[0])->mapWithKeys(fn (ProductVariantOption $o): array => [
+            (int) $o->product_variant_group_id => $o->label,
+        ])->all();
+        $this->assertSame('20"', $byGroup[1]);
+        $this->assertSame('Pink', $byGroup[2]);
+        $this->assertSame('3x', $byGroup[3]);
+
+        // No filter -> both lengths.
+        $all = RetailFamilySellableCombinations::forNewVariantOptions($family, collect([202]));
+        $this->assertCount(2, $all);
     }
 
     /**

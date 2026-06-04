@@ -68,9 +68,11 @@ final class RetailFamilySellableCombinations
 
     /**
      * @param  Collection<int, int>  $newOptionIds
+     * @param  list<int>  $mainOptionIds  Restrict new sub SKUs to these main values
+     *                                    (e.g. only Length 20"). Empty = every main value.
      * @return list<list<ProductVariantOption>>
      */
-    public static function forNewVariantOptions(ProductFamily $family, Collection $newOptionIds): array
+    public static function forNewVariantOptions(ProductFamily $family, Collection $newOptionIds, array $mainOptionIds = []): array
     {
         if (! $family->relationLoaded('variantGroups')) {
             $family->loadMissing(['variantGroups.options']);
@@ -133,7 +135,7 @@ final class RetailFamilySellableCombinations
 
             $newOption->setRelation('group', $targetGroup);
 
-            foreach (self::combosForNewOption($family, $products, $axes, $newOption) as $combo) {
+            foreach (self::combosForNewOption($family, $products, $axes, $newOption, $mainOptionIds) as $combo) {
                 $signature = self::variantSignature($family, collect($combo));
 
                 if (isset($seen[$signature])) {
@@ -156,6 +158,7 @@ final class RetailFamilySellableCombinations
         Collection $products,
         RetailFamilyVariantAxes $axes,
         ProductVariantOption $newOption,
+        array $mainOptionIds = [],
     ): array {
         $targetGroupId = (int) $newOption->product_variant_group_id;
 
@@ -167,7 +170,7 @@ final class RetailFamilySellableCombinations
             return self::combosForNewCommonOption($family, $products, $axes, $newOption);
         }
 
-        return self::combosForNewSubOption($family, $products, $axes, $newOption);
+        return self::combosForNewSubOption($family, $products, $axes, $newOption, $mainOptionIds);
     }
 
     /**
@@ -180,6 +183,7 @@ final class RetailFamilySellableCombinations
         Collection $products,
         RetailFamilyVariantAxes $axes,
         ProductVariantOption $newOption,
+        array $mainOptionIds = [],
     ): array {
         $targetGroupId = (int) $newOption->product_variant_group_id;
         $pinnedCommon = $axes->pinnedCommonOptions($family, $products, $newOption);
@@ -188,6 +192,16 @@ final class RetailFamilySellableCombinations
 
         if ($mainRows === []) {
             $mainRows = [self::inferSubRowFromReferences($family, $axes, $references, $targetGroupId)];
+        }
+
+        // Restrict to the chosen main values (e.g. only Length 20") when asked.
+        $mainOptionIds = array_values(array_filter(array_map('intval', $mainOptionIds)));
+        if ($mainOptionIds !== [] && $axes->mainGroup !== null) {
+            $mainGroupId = (int) $axes->mainGroup->id;
+            $mainRows = array_values(array_filter(
+                $mainRows,
+                fn (array $row): bool => in_array((int) ($row[$mainGroupId]?->id ?? 0), $mainOptionIds, true),
+            ));
         }
 
         $combos = [];

@@ -10477,6 +10477,60 @@
         color: #2f6b54;
     }
 
+    /* "Which length?" picker when creating a sub-variant SKU under multiple mains */
+    .rfm-length-picker-backdrop {
+        @apply fixed inset-0 z-50;
+        background: rgba(20, 25, 22, 0.25);
+    }
+
+    .rfm-length-picker {
+        @apply fixed w-[280px] max-w-[92vw] rounded-xl border p-3 shadow-xl;
+        border-color: #d9d4c8;
+        background: #fffaf3;
+    }
+
+    .rfm-length-picker-title {
+        @apply mb-2 text-sm font-bold text-stone-700;
+    }
+
+    .rfm-length-picker-list {
+        @apply flex flex-col gap-1;
+    }
+
+    .rfm-length-picker-row {
+        @apply flex items-center gap-2 rounded-lg border px-2 py-1.5 text-sm font-semibold;
+        border-color: #eadfcc;
+        background: #fff;
+    }
+
+    .rfm-length-picker-row em {
+        @apply ml-auto text-[11px] font-bold uppercase not-italic tracking-wide;
+        color: #2f6b54;
+    }
+
+    .rfm-length-picker-row.is-covered {
+        opacity: 0.7;
+    }
+
+    .rfm-length-picker-row.is-covered em {
+        color: #9a8f78;
+    }
+
+    .rfm-length-picker-actions {
+        @apply mt-3 flex justify-end gap-2;
+    }
+
+    .rfm-length-picker-cancel {
+        @apply min-h-9 rounded-lg border px-3 text-xs font-bold;
+        border-color: #d9d4c8;
+        background: #fff;
+    }
+
+    .rfm-length-picker-create {
+        @apply min-h-9 rounded-lg px-4 text-xs font-black text-white;
+        background: #1f6f54;
+    }
+
     .rfm-section[open] > summary {
         border-bottom: 1px solid var(--color-edge);
     }
@@ -12088,14 +12142,6 @@
     }
 
     /* ── SKU groups (accordion by main variant) ── */
-
-    .rfm-sku-groups-split-all {
-        @apply inline;
-    }
-
-    .rfm-sku-groups-split-all-btn {
-        color: #2a5c8a;
-    }
 
     .rfm-sku-groups-toolbar {
         @apply mb-2 flex items-center justify-end gap-2;

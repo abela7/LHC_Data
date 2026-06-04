@@ -344,6 +344,7 @@ class RetailProductController extends Controller
             'variantOptionSellable' => $this->variantOptionSellableMap($family),
             'variantGroupTypeOptions' => $this->variantGroupTypeOptions(),
             'axisRoleOptions' => ProductVariantGroup::ROLE_LABELS,
+            'mainAxisPicker' => $this->mainAxisPickerData($family),
             'inventoryLocations' => InventoryLocation::with(['sections' => fn ($q) => $q->where('is_active', true)->orderBy('sort_order')->orderBy('name')])->where('is_active', true)->orderBy('sort_order')->orderBy('name')->get(),
         ]);
     }
@@ -499,6 +500,8 @@ class RetailProductController extends Controller
             $data = $request->validate([
                 'option_ids' => ['required', 'array', 'min:1'],
                 'option_ids.*' => ['integer'],
+                'main_option_ids' => ['nullable', 'array'],
+                'main_option_ids.*' => ['integer'],
             ]);
 
             $family->load([
@@ -543,6 +546,19 @@ class RetailProductController extends Controller
                 ], 422);
             }
 
+            // Optional: restrict new sub SKUs to chosen main values (e.g. only Length 20").
+            $axes = RetailFamilyVariantAxes::forFamily($family, $family->products);
+            $mainOptionIds = [];
+            if (! empty($data['main_option_ids']) && $axes->mainGroup !== null) {
+                $allowedMainIds = $axes->mainGroup->options->pluck('id')->map(fn ($id): int => (int) $id);
+                $mainOptionIds = collect($data['main_option_ids'])
+                    ->map(fn ($id): int => (int) $id)
+                    ->filter(fn (int $id): bool => $allowedMainIds->contains($id))
+                    ->unique()
+                    ->values()
+                    ->all();
+            }
+
             $existingSignatures = $this->existingFamilyVariantSignatures($family);
             $defaultOpts = $this->defaultSellableProductOpts($family);
             $createdProducts = [];
@@ -550,7 +566,7 @@ class RetailProductController extends Controller
             $skippedConflict = 0;
             $existingExamples = [];
 
-            foreach (RetailFamilySellableCombinations::forNewVariantOptions($family, $validOptionIds) as $combo) {
+            foreach (RetailFamilySellableCombinations::forNewVariantOptions($family, $validOptionIds, $mainOptionIds) as $combo) {
                 $signature = RetailFamilySellableCombinations::variantSignature($family, collect($combo));
 
                 if (isset($existingSignatures[$signature])) {
@@ -1136,6 +1152,58 @@ class RetailProductController extends Controller
     private function countMissingCombosForVariantOption(ProductFamily $family, ProductVariantOption $option): int
     {
         return $this->variantOptionSellableMap($family)[(int) $option->id]['missing'] ?? 0;
+    }
+
+    /**
+     * Data for the "which length?" picker shown when creating a sub-variant SKU
+     * under multiple main values: the main axis options, and which main values
+     * each sub option already has a SKU for (so the picker can pre-check only the
+     * missing ones).
+     *
+     * @return array{options: list<array{id: int, label: string}>, coverage: array<int, list<int>>}
+     */
+    private function mainAxisPickerData(ProductFamily $family): array
+    {
+        $axes = RetailFamilyVariantAxes::forFamily($family, $family->products);
+
+        if (! $axes->explicit || $axes->mainGroup === null) {
+            return ['options' => [], 'coverage' => []];
+        }
+
+        $mainGroupId = (int) $axes->mainGroup->id;
+
+        $options = $axes->mainGroup->options
+            ->map(fn (ProductVariantOption $option): array => ['id' => (int) $option->id, 'label' => (string) $option->label])
+            ->values()
+            ->all();
+
+        $coverage = [];
+        foreach ($family->products as $product) {
+            $mainOptionId = (int) ($product->variantValues
+                ->firstWhere('product_variant_group_id', $mainGroupId)?->product_variant_option_id ?? 0);
+
+            if ($mainOptionId <= 0) {
+                continue;
+            }
+
+            foreach ($product->variantValues as $value) {
+                $groupId = (int) $value->product_variant_group_id;
+
+                if ($groupId === $mainGroupId || ! $axes->isSubGroup($groupId)) {
+                    continue;
+                }
+
+                $coverage[(int) $value->product_variant_option_id][$mainOptionId] = true;
+            }
+        }
+
+        return [
+            'options' => $options,
+            'coverage' => array_map(
+                fn (array $mains): array => array_values(array_map('intval', array_keys($mains))),
+                $coverage,
+            ),
+        ];
     }
 
     /**
