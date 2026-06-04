@@ -6357,6 +6357,13 @@ const initVariantModelChips = (root, csrf, showToast) => {
         });
     };
 
+    // Read the persistent "add new … under" main scope on a sub-main field.
+    const selectedScopeMains = (field) => {
+        const scope = field?.querySelector('[data-rfm-main-scope]');
+        if (!scope) return null; // no scope control on this field
+        return [...scope.querySelectorAll('[data-rfm-main-scope-opt]:checked')].map((c) => Number(c.value));
+    };
+
     // Decide placement right after value(s) are added (comma/Enter), then create.
     const promptPlacementAndCreate = (field, newOptions) => {
         const optionIds = newOptions.map((o) => Number(o.id)).filter((id) => id > 0);
@@ -6366,6 +6373,16 @@ const initVariantModelChips = (root, csrf, showToast) => {
         const anchorEl = field?.querySelector('[data-rfm-variant-chip-input]') || field;
 
         if (role === 'sub_main' && mainAxisOptions.length >= 2) {
+            // Persistent scope picked once -> bulk-create under it, no per-value popup.
+            const scopeMains = selectedScopeMains(field);
+            if (scopeMains !== null) {
+                if (scopeMains.length) {
+                    runCreateSellableSkus(optionIds, scopeMains, []);
+                } else {
+                    showToast(`Tick at least one ${mainAxisName} above to add new ${field.dataset.groupName || 'values'}.`, true);
+                }
+                return;
+            }
             showPlacementPicker({ optionIds, mode: 'sub', anchorEl, label, covered: [] });
         } else if (role === 'main' && subAxisOptions.length >= 2) {
             showPlacementPicker({ optionIds, mode: 'main', anchorEl, label, covered: [] });

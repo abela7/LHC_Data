@@ -565,6 +565,17 @@
                                      data-group-name="{{ $group->name }}"
                                      data-group-role="{{ $group->axis_role ?? '' }}">
                                     <p class="rfm-variant-chip-intro">Type values — <strong>comma</strong> or <strong>Enter</strong> saves each one in the background.</p>
+                                    @if (($group->axis_role ?? '') === 'sub_main' && count($mainAxisPicker['mainOptions'] ?? []) >= 2)
+                                        <div class="rfm-chip-main-scope" data-rfm-main-scope>
+                                            <span class="rfm-chip-main-scope-label">New {{ $group->name }} go under {{ $mainAxisPicker['mainName'] }}:</span>
+                                            @foreach ($mainAxisPicker['mainOptions'] as $mainOpt)
+                                                <label class="rfm-chip-main-scope-opt">
+                                                    <input type="checkbox" data-rfm-main-scope-opt value="{{ $mainOpt['id'] }}" checked>
+                                                    <span>{{ $mainOpt['label'] }}</span>
+                                                </label>
+                                            @endforeach
+                                        </div>
+                                    @endif
                                     <div class="rfm-variant-chip-box">
                                         @foreach ($group->options as $option)
                                             @php

@@ -10531,6 +10531,25 @@
         background: #1f6f54;
     }
 
+    /* Persistent "new sub-values go under these mains" scope on a sub-main field */
+    .rfm-chip-main-scope {
+        @apply mb-2 flex flex-wrap items-center gap-2 rounded-[10px] border px-2.5 py-2;
+        border-color: #cfe0d6;
+        background: #eef5f0;
+    }
+
+    .rfm-chip-main-scope-label {
+        @apply text-[11px] font-bold uppercase tracking-[0.08em];
+        color: #2f6b54;
+    }
+
+    .rfm-chip-main-scope-opt {
+        @apply inline-flex cursor-pointer items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-bold;
+        border-color: #cfe0d6;
+        background: #fff;
+        color: #2f6b54;
+    }
+
     .rfm-section[open] > summary {
         border-bottom: 1px solid var(--color-edge);
     }

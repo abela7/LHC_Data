@@ -2101,7 +2101,7 @@ class RetailProductController extends Controller
     {
         $data = $request->validate([
             'product_variant_group_id' => ['required', 'integer'],
-            'labels' => ['required', 'array', 'min:1', 'max:40'],
+            'labels' => ['required', 'array', 'min:1', 'max:200'],
             'labels.*' => ['required', 'string', 'max:255'],
         ]);
 
