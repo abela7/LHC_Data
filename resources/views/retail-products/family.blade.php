@@ -487,28 +487,8 @@
                             <article class="rfm-variant-item">
                                 <header class="rfm-variant-item-head">
                                     <div>
-                                        <h3>
-                                            {{ $group->name }}
-                                            <span class="rfm-variant-role-badge rfm-variant-role-badge--{{ $group->axis_role ?? 'auto' }}">{{ $group->roleLabel() ?? 'Auto' }}</span>
-                                        </h3>
+                                        <h3>{{ $group->name }}</h3>
                                         <span>{{ $variantGroupTypeLabels[$group->variant_type] ?? str_replace(['_', '-'], ' ', $group->variant_type) }}</span>
-                                        <form method="POST"
-                                              action="{{ route('retail-products.families.variant-groups.role', ['family' => $family, 'variantGroup' => $group]) }}"
-                                              class="rfm-variant-role-form"
-                                              data-rfm-role-form>
-                                            @csrf
-                                            @method('PATCH')
-                                            <label class="rfm-variant-role-label">
-                                                <span>Role</span>
-                                                <select name="axis_role" class="rfm-variant-role-select" data-rfm-role-select aria-label="Axis role for {{ $group->name }}">
-                                                    <option value="" @selected(! $group->hasExplicitRole())>Auto</option>
-                                                    @foreach ($axisRoleOptions as $roleValue => $roleLabel)
-                                                        <option value="{{ $roleValue }}" @selected($group->axis_role === $roleValue)>{{ $roleLabel }}</option>
-                                                    @endforeach
-                                                </select>
-                                            </label>
-                                            <noscript><button type="submit">Set</button></noscript>
-                                        </form>
                                     </div>
                                     <form method="POST"
                                           action="{{ route('retail-products.families.variant-groups.destroy', ['family' => $family, 'variantGroup' => $group]) }}"
@@ -525,6 +505,21 @@
                                         </button>
                                     </form>
                                 </header>
+                                <form method="POST"
+                                      action="{{ route('retail-products.families.variant-groups.role', ['family' => $family, 'variantGroup' => $group]) }}"
+                                      class="rfm-variant-role-row"
+                                      data-rfm-role-form>
+                                    @csrf
+                                    @method('PATCH')
+                                    <span class="rfm-variant-role-row-label">Role</span>
+                                    <select name="axis_role" class="rfm-variant-role-select" data-rfm-role-select aria-label="Axis role for {{ $group->name }}">
+                                        <option value="" @selected(! $group->hasExplicitRole())>Auto (guess)</option>
+                                        @foreach ($axisRoleOptions as $roleValue => $roleLabel)
+                                            <option value="{{ $roleValue }}" @selected($group->axis_role === $roleValue)>{{ $roleLabel }}</option>
+                                        @endforeach
+                                    </select>
+                                    <noscript><button type="submit" class="rfm-variant-role-set">Set</button></noscript>
+                                </form>
                                 @if ($groupUsedCount > 0)
                                     <p class="rfm-variant-group-usage">
                                         Used by {{ $groupUsedCount }} sellable SKU{{ $groupUsedCount === 1 ? '' : 's' }}.
