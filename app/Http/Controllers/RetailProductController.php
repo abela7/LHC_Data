@@ -667,8 +667,8 @@ class RetailProductController extends Controller
             $exampleCount = count($existingExamples);
             $message = match (true) {
                 $createdCount === 0 && $skippedExisting > 0 => $exampleCount > 0
-                    ? "Sellable products for {$newOptionLabels} already exist ({$exampleCount} example".($exampleCount === 1 ? '' : 's')." listed below). Check the variant breakdown (e.g. Pack: Grey vs Colour: Grey) — the name alone often hides which axis is Grey."
-                    : "Sellable products for {$newOptionLabels} already exist on this family — expand each group in the SKU list or search for the value label.",
+                    ? "No new SKU created. The selected {$newOptionLabels} combination already exists ({$exampleCount} matching SKU".($exampleCount === 1 ? '' : 's').').'
+                    : "No new SKU created. The selected {$newOptionLabels} combination already exists.",
                 $createdCount === 1 => "Created 1 sellable SKU ({$createdProducts[0]['name']}).",
                 $createdCount > 1 => "Created {$createdCount} sellable SKUs for {$newOptionLabels}.",
                 $createdCount === 0 && $skippedConflict > 0 => 'No sellables created — catalogue SKU already linked elsewhere.',
@@ -676,7 +676,7 @@ class RetailProductController extends Controller
             };
 
             if ($skippedExisting > 0 && $createdCount > 0) {
-                $message .= " {$skippedExisting} combination".($skippedExisting === 1 ? '' : 's').' already existed.';
+                $message .= " {$skippedExisting} selected combination".($skippedExisting === 1 ? '' : 's').' already existed and was skipped.';
             }
             if ($skippedConflict > 0 && $createdCount > 0) {
                 $message .= " {$skippedConflict} skipped (catalogue conflict).";

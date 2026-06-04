@@ -6033,6 +6033,52 @@ const initVariantModelChips = (root, csrf, showToast) => {
         }));
     };
 
+    const optionIdsForSkuRow = (skuRow) => (skuRow?.dataset.rfmVariantOptions || '')
+        .split(/\s+/)
+        .filter(Boolean)
+        .map((id) => Number(id))
+        .filter((id) => id > 0);
+
+    const skuExistsForOptionPair = (optionId, companionOptionId) => {
+        const target = Number(optionId);
+        const companion = Number(companionOptionId);
+
+        return [...root.querySelectorAll('[data-rfm-sku]')].some((skuRow) => {
+            const rowOptionIds = optionIdsForSkuRow(skuRow);
+
+            return rowOptionIds.includes(target) && rowOptionIds.includes(companion);
+        });
+    };
+
+    const labelsForOptionIds = (options, optionIds) => {
+        const labels = new Map((options || []).map((option) => [Number(option.id), option.label]));
+
+        return optionIds
+            .map((id) => labels.get(Number(id)) || String(id))
+            .filter(Boolean);
+    };
+
+    const mergeCoveredMains = (optionIds, mainOptionIds) => {
+        if (!mainOptionIds?.length) return;
+
+        optionIds.forEach((optionId) => {
+            const chip = root.querySelector(`[data-rfm-vchip][data-option-id="${optionId}"]`);
+            if (!chip) return;
+
+            let covered = [];
+            try {
+                covered = JSON.parse(chip.dataset.rfmCoveredMains || '[]').map(Number);
+            } catch (e) {
+                covered = [];
+            }
+
+            chip.dataset.rfmCoveredMains = JSON.stringify([...new Set([
+                ...covered,
+                ...mainOptionIds.map(Number),
+            ])]);
+        });
+    };
+
     const updateSkuGroupCount = (group) => {
         if (!group) return;
         const remaining = group.querySelectorAll('[data-rfm-sku]').length;
@@ -6374,6 +6420,49 @@ const initVariantModelChips = (root, csrf, showToast) => {
     const runCreateSellableSkus = async (optionIds, mainOptionIds = [], subOptionIds = []) => {
         if (!createNewSkusUrl || !optionIds.length) return;
 
+        let scopedMainOptionIds = (mainOptionIds || []).map(Number).filter((id) => id > 0);
+        let scopedSubOptionIds = (subOptionIds || []).map(Number).filter((id) => id > 0);
+        let skippedExistingScopeLabels = [];
+        let skippedExistingScopeName = '';
+
+        if (optionIds.length === 1 && scopedMainOptionIds.length > 0) {
+            const optionId = Number(optionIds[0]);
+            const existingMainIds = scopedMainOptionIds.filter((mainId) => skuExistsForOptionPair(optionId, mainId));
+
+            if (existingMainIds.length === scopedMainOptionIds.length) {
+                const labels = labelsForOptionIds(mainAxisOptions, existingMainIds).join(', ');
+                const chipLabel = root.querySelector(`[data-rfm-vchip][data-option-id="${optionId}"]`)?.dataset.chipLabel || 'This value';
+                showToast(`${chipLabel} already exists for selected ${mainAxisName}: ${labels}.`, true);
+                focusSkuListForOptions(optionIds);
+                return;
+            }
+
+            if (existingMainIds.length > 0) {
+                scopedMainOptionIds = scopedMainOptionIds.filter((mainId) => !existingMainIds.includes(mainId));
+                skippedExistingScopeLabels = labelsForOptionIds(mainAxisOptions, existingMainIds);
+                skippedExistingScopeName = mainAxisName;
+            }
+        }
+
+        if (optionIds.length === 1 && scopedSubOptionIds.length > 0) {
+            const optionId = Number(optionIds[0]);
+            const existingSubIds = scopedSubOptionIds.filter((subId) => skuExistsForOptionPair(optionId, subId));
+
+            if (existingSubIds.length === scopedSubOptionIds.length) {
+                const labels = labelsForOptionIds(subAxisOptions, existingSubIds).join(', ');
+                const chipLabel = root.querySelector(`[data-rfm-vchip][data-option-id="${optionId}"]`)?.dataset.chipLabel || 'This value';
+                showToast(`${chipLabel} already exists for selected ${subAxisName}: ${labels}.`, true);
+                focusSkuListForOptions(optionIds);
+                return;
+            }
+
+            if (existingSubIds.length > 0) {
+                scopedSubOptionIds = scopedSubOptionIds.filter((subId) => !existingSubIds.includes(subId));
+                skippedExistingScopeLabels = labelsForOptionIds(subAxisOptions, existingSubIds);
+                skippedExistingScopeName = subAxisName;
+            }
+        }
+
         const busyChips = optionIds
             .map((id) => root.querySelector(`[data-rfm-vchip][data-option-id="${id}"]`))
             .filter(Boolean);
@@ -6389,8 +6478,8 @@ const initVariantModelChips = (root, csrf, showToast) => {
         const formData = new FormData();
         formData.append('_token', csrf);
         optionIds.forEach((id, index) => formData.append(`option_ids[${index}]`, String(id)));
-        (mainOptionIds || []).forEach((id, index) => formData.append(`main_option_ids[${index}]`, String(id)));
-        (subOptionIds || []).forEach((id, index) => formData.append(`sub_option_ids[${index}]`, String(id)));
+        scopedMainOptionIds.forEach((id, index) => formData.append(`main_option_ids[${index}]`, String(id)));
+        scopedSubOptionIds.forEach((id, index) => formData.append(`sub_option_ids[${index}]`, String(id)));
 
         try {
             const response = await fetch(createNewSkusUrl, {
@@ -6406,6 +6495,7 @@ const initVariantModelChips = (root, csrf, showToast) => {
             syncChipSellableState(data.variant_option_sellable);
             updateCreateBar();
             appendCreatedSkuRows(data.products);
+            mergeCoveredMains(optionIds, scopedMainOptionIds);
 
             const createdCount = Number(data.created_count) || 0;
             const skippedExisting = Number(data.skipped_existing) || 0;
@@ -6416,7 +6506,11 @@ const initVariantModelChips = (root, csrf, showToast) => {
                 showToast(data.message || 'Sellable products already exist for this value.', true);
             } else {
                 clearExistingSkusNotice();
-                showToast(data.message || 'Sellable products created.');
+                let message = data.message || 'Sellable products created.';
+                if (skippedExistingScopeLabels.length > 0) {
+                    message += ` Already existed for ${skippedExistingScopeName}: ${skippedExistingScopeLabels.join(', ')}.`;
+                }
+                showToast(message);
 
                 if (createdCount > 0) {
                     const skusWorkspace = document.getElementById('rfm-skus-workspace');
