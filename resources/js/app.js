@@ -6032,60 +6032,81 @@ const initVariantModelChips = (root, csrf, showToast) => {
         if (labelList.length) persistLabels(field, labelList);
     };
 
-    if (createBtn && createNewSkusUrl) {
-        createBtn.addEventListener('click', async () => {
-            const optionIds = pendingOptionIds();
-            if (!optionIds.length) return;
+    const runCreateSellableSkus = async (optionIds) => {
+        if (!createNewSkusUrl || !optionIds.length) return;
 
+        const busyChips = optionIds
+            .map((id) => root.querySelector(`[data-rfm-vchip][data-option-id="${id}"]`))
+            .filter(Boolean);
+        busyChips.forEach((chip) => chip.classList.add('is-busy'));
+        if (createBtn) {
             createBtn.disabled = true;
             createBtn.classList.add('is-busy');
-            const originalLabel = createBtn.textContent;
-            createBtn.textContent = 'Creating…';
+        }
 
-            const formData = new FormData();
-            formData.append('_token', csrf);
-            optionIds.forEach((id, index) => formData.append(`option_ids[${index}]`, String(id)));
+        const originalBtnLabel = createBtn?.textContent;
+        if (createBtn) createBtn.textContent = 'Creating…';
 
-            try {
-                const response = await fetch(createNewSkusUrl, {
-                    method: 'POST',
-                    body: formData,
-                    headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
-                });
-                const data = await response.json().catch(() => ({}));
-                if (!response.ok) {
-                    throw new Error(data.message || 'Could not create sellable products.');
-                }
+        const formData = new FormData();
+        formData.append('_token', csrf);
+        optionIds.forEach((id, index) => formData.append(`option_ids[${index}]`, String(id)));
 
-                optionIds.forEach((id) => markChipReady(id));
-
-                if (data.variant_option_sellable) {
-                    Object.entries(data.variant_option_sellable).forEach(([id, stats]) => {
-                        const chip = root.querySelector(`[data-rfm-vchip][data-option-id="${id}"]`);
-                        if (chip && stats.missing > 0) {
-                            chip.dataset.rfmMissing = String(stats.missing);
-                            chip.classList.add('needs-sku');
-                            chip.classList.remove('is-ready');
-                        }
-                    });
-                }
-
-                updateCreateBar();
-                await refreshFamilySkuList();
-
-                showToast(data.message || 'Sellable products created.');
-
-                const skusWorkspace = document.getElementById('rfm-skus-workspace');
-                if (skusWorkspace) {
-                    skusWorkspace.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                }
-            } catch (err) {
-                showToast(err.message || 'Could not create sellable products.', true);
-            } finally {
-                createBtn.classList.remove('is-busy');
-                createBtn.textContent = originalLabel;
-                updateCreateBar();
+        try {
+            const response = await fetch(createNewSkusUrl, {
+                method: 'POST',
+                body: formData,
+                headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+            });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                throw new Error(data.message || 'Could not create sellable products.');
             }
+
+            optionIds.forEach((id) => markChipReady(id));
+
+            if (data.variant_option_sellable) {
+                Object.entries(data.variant_option_sellable).forEach(([id, stats]) => {
+                    const chip = root.querySelector(`[data-rfm-vchip][data-option-id="${id}"]`);
+                    if (chip && stats.missing > 0) {
+                        chip.dataset.rfmMissing = String(stats.missing);
+                        chip.classList.add('needs-sku');
+                        chip.classList.remove('is-ready');
+                        const pending = chip.querySelector('.rfm-vchip-pending, .rfm-vchip-ready');
+                        if (pending) {
+                            pending.className = 'rfm-vchip-pending';
+                            pending.textContent = 'Pending';
+                        }
+                    }
+                });
+            }
+
+            updateCreateBar();
+            await refreshFamilySkuList();
+
+            showToast(data.message || 'Sellable products created.');
+
+            const skusWorkspace = document.getElementById('rfm-skus-workspace');
+            if (skusWorkspace) {
+                skusWorkspace.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        } catch (err) {
+            showToast(err.message || 'Could not create sellable products.', true);
+        } finally {
+            busyChips.forEach((chip) => chip.classList.remove('is-busy'));
+            if (createBtn) {
+                createBtn.disabled = false;
+                createBtn.classList.remove('is-busy');
+                if (originalBtnLabel) createBtn.textContent = originalBtnLabel;
+            }
+            updateCreateBar();
+        }
+    };
+
+    if (createBtn && createNewSkusUrl) {
+        createBtn.addEventListener('click', () => {
+            const optionIds = pendingOptionIds();
+            if (!optionIds.length) return;
+            runCreateSellableSkus(optionIds);
         });
     }
 
@@ -6102,6 +6123,17 @@ const initVariantModelChips = (root, csrf, showToast) => {
     });
 
     root.addEventListener('click', async (event) => {
+        const pendingChip = event.target.closest('[data-rfm-vchip].needs-sku');
+        if (pendingChip && !event.target.closest('[data-rfm-vchip-delete]') && createNewSkusUrl) {
+            event.preventDefault();
+            if (pendingChip.classList.contains('is-busy')) return;
+            const optionId = Number(pendingChip.dataset.optionId);
+            if (optionId > 0) {
+                await runCreateSellableSkus([optionId]);
+            }
+            return;
+        }
+
         const btn = event.target.closest('[data-rfm-vchip-delete]');
         if (!btn) return;
         event.preventDefault();

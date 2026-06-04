@@ -24,6 +24,7 @@ use App\Services\RetailDescriptionWriterService;
 use App\Services\SkuCodeAllocator;
 use App\Support\CustomerProductDescription;
 use App\Support\HairExtensionLengthLabel;
+use App\Support\RetailFamilySellableCombinations;
 use App\Support\RetailFamilySkuGrouper;
 use App\Support\RetailStyleFamilyCatalogue;
 use App\Support\VariantNaturalSort;
@@ -489,114 +490,122 @@ class RetailProductController extends Controller
      */
     public function createSkusForNewVariantOptions(Request $request, ProductFamily $family): JsonResponse
     {
-        $data = $request->validate([
-            'option_ids' => ['required', 'array', 'min:1'],
-            'option_ids.*' => ['integer'],
-        ]);
+        try {
+            $data = $request->validate([
+                'option_ids' => ['required', 'array', 'min:1'],
+                'option_ids.*' => ['integer'],
+            ]);
 
-        $family->load([
-            'brand',
-            'catalogueStyle',
-            'categoryAssignments',
-            'variantGroups.options',
-            'products.price',
-            'products.variantValues.option',
-            'products.variantValues.group',
-            'ecommerceProfile',
-        ]);
+            $family->load([
+                'brand',
+                'catalogueStyle',
+                'categoryAssignments',
+                'variantGroups.options',
+                'products.price',
+                'products.variantValues.option',
+                'products.variantValues.group',
+                'ecommerceProfile',
+            ]);
 
-        foreach ($family->variantGroups as $variantGroup) {
-            if ($variantGroup->options->isEmpty()) {
+            foreach ($family->variantGroups as $variantGroup) {
+                if ($variantGroup->options->isEmpty()) {
+                    return response()->json([
+                        'message' => "Cannot create SKUs: the \"{$variantGroup->name}\" axis has no values yet.",
+                    ], 422);
+                }
+            }
+
+            $optionIds = collect($data['option_ids'])
+                ->map(fn (mixed $id): int => (int) $id)
+                ->filter(fn (int $id): bool => $id > 0)
+                ->unique()
+                ->values();
+
+            $validOptionIds = ProductVariantOption::query()
+                ->whereIn('id', $optionIds->all())
+                ->whereIn('product_variant_group_id', $family->variantGroups->pluck('id'))
+                ->pluck('id')
+                ->map(fn (mixed $id): int => (int) $id)
+                ->values();
+
+            if ($validOptionIds->isEmpty()) {
+                return response()->json(['message' => 'No valid variant values were selected.'], 422);
+            }
+
+            if ($family->products->isEmpty()) {
                 return response()->json([
-                    'message' => "Cannot create SKUs: the \"{$variantGroup->name}\" axis has no values yet.",
+                    'message' => 'Add at least one sellable SKU manually first, then new variant values can copy its length, pack and other axes.',
                 ], 422);
             }
-        }
 
-        $optionIds = collect($data['option_ids'])
-            ->map(fn (mixed $id): int => (int) $id)
-            ->filter(fn (int $id): bool => $id > 0)
-            ->unique()
-            ->values();
+            $existingSignatures = $this->existingFamilyVariantSignatures($family);
+            $defaultOpts = $this->defaultSellableProductOpts($family);
+            $createdProducts = [];
+            $skippedExisting = 0;
+            $skippedConflict = 0;
 
-        $validOptionIds = ProductVariantOption::query()
-            ->whereIn('id', $optionIds)
-            ->whereIn('product_variant_group_id', $family->variantGroups->pluck('id'))
-            ->pluck('id')
-            ->map(fn (mixed $id): int => (int) $id);
+            foreach (RetailFamilySellableCombinations::forNewVariantOptions($family, $validOptionIds) as $combo) {
+                $signature = collect($combo)
+                    ->map(fn (ProductVariantOption $option): int => (int) $option->id)
+                    ->sort()
+                    ->values()
+                    ->implode(',');
 
-        if ($validOptionIds->isEmpty()) {
-            return response()->json(['message' => 'No valid variant values were selected.'], 422);
-        }
+                if (isset($existingSignatures[$signature])) {
+                    $skippedExisting++;
 
-        $validOptionIdSet = $validOptionIds->flip();
-        $existingSignatures = $this->existingFamilyVariantSignatures($family);
-        $defaultOpts = $this->defaultSellableProductOpts($family);
-        $createdProducts = [];
-        $skippedExisting = 0;
-        $skippedConflict = 0;
+                    continue;
+                }
 
-        foreach ($this->cartesianFamilyVariantCombinations($family) as $combo) {
-            $includesNewOption = collect($combo)->contains(
-                fn (ProductVariantOption $option): bool => $validOptionIdSet->has((int) $option->id),
-            );
+                $product = $this->createSellableProductForFamily($family, collect($combo), $defaultOpts);
 
-            if (! $includesNewOption) {
-                continue;
+                if ($product === null) {
+                    $skippedConflict++;
+
+                    continue;
+                }
+
+                $existingSignatures[$signature] = true;
+                $createdProducts[] = [
+                    'id' => $product->id,
+                    'name' => $product->name,
+                    'sku' => $product->sku,
+                    'url' => route('retail-products.products.show', $product),
+                ];
             }
 
-            $signature = collect($combo)
-                ->map(fn (ProductVariantOption $o): int => (int) $o->id)
-                ->sort()
-                ->values()
-                ->implode(',');
+            $createdCount = count($createdProducts);
+            $message = match (true) {
+                $createdCount === 0 && $skippedExisting > 0 => 'Those sellable products already exist.',
+                $createdCount === 1 => "Created 1 sellable SKU ({$createdProducts[0]['name']}).",
+                $createdCount > 1 => "Created {$createdCount} sellable SKUs.",
+                default => 'No sellable products were created. Check that existing SKUs cover the main axes (e.g. length) for templates.',
+            };
 
-            if (isset($existingSignatures[$signature])) {
-                $skippedExisting++;
-
-                continue;
+            if ($skippedExisting > 0 && $createdCount > 0) {
+                $message .= " {$skippedExisting} combination".($skippedExisting === 1 ? '' : 's').' already existed.';
+            }
+            if ($skippedConflict > 0) {
+                $message .= " {$skippedConflict} skipped (catalogue conflict).";
             }
 
-            $product = $this->createSellableProductForFamily($family, collect($combo), $defaultOpts);
+            return response()->json([
+                'message' => $message,
+                'created_count' => $createdCount,
+                'skipped_existing' => $skippedExisting,
+                'skipped_conflict' => $skippedConflict,
+                'products' => $createdProducts,
+                'variant_option_sellable' => $this->variantOptionSellableMap($family),
+            ]);
+        } catch (ValidationException $exception) {
+            throw $exception;
+        } catch (\Throwable $exception) {
+            report($exception);
 
-            if ($product === null) {
-                $skippedConflict++;
-
-                continue;
-            }
-
-            $existingSignatures[$signature] = true;
-            $createdProducts[] = [
-                'id' => $product->id,
-                'name' => $product->name,
-                'sku' => $product->sku,
-                'url' => route('retail-products.products.show', $product),
-            ];
+            return response()->json([
+                'message' => 'Could not create sellable products. '.$exception->getMessage(),
+            ], 500);
         }
-
-        $createdCount = count($createdProducts);
-        $message = match (true) {
-            $createdCount === 0 && $skippedExisting > 0 => 'Those sellable products already exist.',
-            $createdCount === 1 => "Created 1 sellable SKU ({$createdProducts[0]['name']}).",
-            $createdCount > 1 => "Created {$createdCount} sellable SKUs.",
-            default => 'No sellable products were created.',
-        };
-
-        if ($skippedExisting > 0 && $createdCount > 0) {
-            $message .= " {$skippedExisting} combination".($skippedExisting === 1 ? '' : 's').' already existed.';
-        }
-        if ($skippedConflict > 0) {
-            $message .= " {$skippedConflict} skipped (catalogue conflict).";
-        }
-
-        return response()->json([
-            'message' => $message,
-            'created_count' => $createdCount,
-            'skipped_existing' => $skippedExisting,
-            'skipped_conflict' => $skippedConflict,
-            'products' => $createdProducts,
-            'variant_option_sellable' => $this->variantOptionSellableMap($family),
-        ]);
     }
 
     /**
@@ -622,7 +631,7 @@ class RetailProductController extends Controller
             }
         }
 
-        $combinations = $this->combinationsIncludingVariantOption($family, $option);
+        $combinations = RetailFamilySellableCombinations::forNewVariantOptions($family, collect([(int) $option->id]));
         if ($combinations === []) {
             return back()->with('status', 'No variant combinations use this value.');
         }
@@ -943,7 +952,7 @@ class RetailProductController extends Controller
                 $missing = 0;
                 $comboTotal = 0;
 
-                foreach ($this->combinationsIncludingVariantOption($family, $option) as $combo) {
+                foreach (RetailFamilySellableCombinations::forNewVariantOptions($family, collect([(int) $option->id])) as $combo) {
                     $comboTotal++;
                     $signature = collect($combo)
                         ->map(fn (ProductVariantOption $o): int => (int) $o->id)
@@ -964,21 +973,6 @@ class RetailProductController extends Controller
         }
 
         return $map;
-    }
-
-    /**
-     * @return list<list<ProductVariantOption>>
-     */
-    private function combinationsIncludingVariantOption(ProductFamily $family, ProductVariantOption $option): array
-    {
-        $optionId = (int) $option->id;
-
-        return array_values(array_filter(
-            $this->cartesianFamilyVariantCombinations($family),
-            fn (array $combo): bool => collect($combo)->contains(
-                fn (ProductVariantOption $o): bool => (int) $o->id === $optionId,
-            ),
-        ));
     }
 
     private function countMissingCombosForVariantOption(ProductFamily $family, ProductVariantOption $option): int

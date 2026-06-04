@@ -519,7 +519,7 @@
                                                   data-rfm-missing="{{ $sellable['missing'] }}">
                                                 <span class="rfm-vchip-label">{{ $option->label }}</span>
                                                 @if ($sellable['missing'] > 0)
-                                                    <span class="rfm-vchip-pending" title="Sellable SKU not created yet">Pending</span>
+                                                    <span class="rfm-vchip-pending" title="Click to create sellable SKUs for this value">Pending</span>
                                                 @else
                                                     <span class="rfm-vchip-ready" title="Sellable SKU exists for this value">Ready</span>
                                                 @endif
@@ -547,7 +547,7 @@
                     <div class="rfm-variant-create-bar" data-rfm-variant-create-bar hidden>
                         <div class="rfm-variant-create-bar-copy">
                             <strong data-rfm-variant-create-title>New variant values ready</strong>
-                            <p data-rfm-variant-create-summary>Add sellable products when you have finished entering values.</p>
+                            <p data-rfm-variant-create-summary>Creates one sellable per existing length/pack combo, using each new colour (or other sub-variant) you added.</p>
                         </div>
                         <button type="button"
                                 class="rfm-variant-create-bar-btn"

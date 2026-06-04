@@ -10633,6 +10633,12 @@
     .rfm-vchip.needs-sku {
         border-color: rgba(29, 111, 95, 0.35);
         background: linear-gradient(135deg, #fffdf8 0%, rgba(216, 239, 232, 0.45) 100%);
+        cursor: pointer;
+    }
+
+    .rfm-vchip.needs-sku:hover {
+        border-color: rgba(29, 111, 95, 0.55);
+        background: linear-gradient(135deg, #fffdf8 0%, rgba(216, 239, 232, 0.7) 100%);
     }
 
     .rfm-vchip.is-ready {
