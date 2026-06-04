@@ -215,6 +215,7 @@ Route::delete('/retail-products/families/{family}/variant-groups/{variantGroup}'
 Route::post('/retail-products/families/{family}/variant-options', [RetailProductController::class, 'storeFamilyVariantOption'])->name('retail-products.families.variant-options.store');
 Route::post('/retail-products/families/{family}/variant-options/bulk', [RetailProductController::class, 'storeFamilyVariantOptionsBulk'])->name('retail-products.families.variant-options.bulk-store');
 Route::post('/retail-products/families/{family}/variant-options/{option}/create-skus', [RetailProductController::class, 'createSkusForVariantOption'])->name('retail-products.families.variant-options.create-skus');
+Route::post('/retail-products/families/{family}/variant-options/create-skus-for-new/preview', [RetailProductController::class, 'previewSkusForNewVariantOptions'])->name('retail-products.families.variant-options.create-skus-for-new.preview');
 Route::post('/retail-products/families/{family}/variant-options/create-skus-for-new', [RetailProductController::class, 'createSkusForNewVariantOptions'])->name('retail-products.families.variant-options.create-skus-for-new');
 Route::patch('/retail-products/families/{family}/variant-options/{option}', [RetailProductController::class, 'updateFamilyVariantOption'])->name('retail-products.families.variant-options.update');
 Route::delete('/retail-products/families/{family}/variant-options/{option}', [RetailProductController::class, 'destroyFamilyVariantOption'])->name('retail-products.families.variant-options.destroy');

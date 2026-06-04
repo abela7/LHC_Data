@@ -166,6 +166,7 @@
              data-rfm-variant-options-bulk-url="{{ route('retail-products.families.variant-options.bulk-store', $family) }}"
              data-rfm-variant-options-destroy-url-template="{{ route('retail-products.families.variant-options.destroy', [$family, 0]) }}"
              data-rfm-create-new-skus-url="{{ route('retail-products.families.variant-options.create-skus-for-new', $family) }}"
+             data-rfm-preview-new-skus-url="{{ route('retail-products.families.variant-options.create-skus-for-new.preview', $family) }}"
              data-rfm-main-axis-name="{{ $mainAxisPicker['mainName'] ?? '' }}"
              data-rfm-main-axis-options='@json($mainAxisPicker["mainOptions"] ?? [])'
              data-rfm-sub-axis-name="{{ $mainAxisPicker['subName'] ?? '' }}"
@@ -630,7 +631,7 @@
                                 class="rfm-variant-create-bar-btn"
                                 data-rfm-create-new-skus
                                 disabled>
-                            Create sellable SKUs
+                            Review &amp; create sellable SKUs
                         </button>
                     </div>
 

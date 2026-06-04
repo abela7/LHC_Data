@@ -10531,6 +10531,93 @@
         background: #1f6f54;
     }
 
+    .rfm-sku-create-preview-backdrop {
+        @apply fixed inset-0 z-[60] flex items-end justify-center p-3 sm:items-center;
+        background: rgba(20, 25, 22, 0.35);
+    }
+
+    .rfm-sku-create-preview {
+        @apply flex w-full max-w-lg max-h-[min(88vh,640px)] flex-col overflow-hidden rounded-2xl border shadow-xl;
+        border-color: #d9d4c8;
+        background: #fffaf3;
+    }
+
+    .rfm-sku-create-preview-title {
+        @apply border-b px-4 py-3 text-base font-bold;
+        border-color: #eadfcc;
+        color: var(--color-ink);
+        margin: 0;
+    }
+
+    .rfm-sku-create-preview-meta {
+        @apply space-y-1 border-b px-4 py-3 text-sm;
+        border-color: #eadfcc;
+        color: #5c665f;
+    }
+
+    .rfm-sku-create-preview-meta strong {
+        @apply mr-1 font-bold;
+        color: var(--color-ink);
+    }
+
+    .rfm-sku-create-preview-list {
+        @apply m-0 flex-1 list-none space-y-2 overflow-y-auto p-3;
+    }
+
+    .rfm-sku-create-preview-item {
+        @apply flex flex-col gap-0.5 rounded-xl border px-3 py-2.5;
+        border-color: #eadfcc;
+        background: #fff;
+    }
+
+    .rfm-sku-create-preview-name {
+        @apply text-sm font-bold leading-snug;
+        color: var(--color-ink);
+    }
+
+    .rfm-sku-create-preview-variants {
+        @apply text-xs leading-snug;
+        color: #5c665f;
+    }
+
+    .rfm-sku-create-preview-price {
+        @apply text-xs font-bold;
+        color: #1d6f5f;
+    }
+
+    .rfm-sku-create-preview-price.is-missing {
+        color: #9a6b12;
+    }
+
+    .rfm-sku-create-preview-skip {
+        @apply border-t px-4 py-2 text-xs;
+        border-color: #eadfcc;
+        color: #6b4e12;
+        margin: 0;
+    }
+
+    .rfm-sku-create-preview-actions {
+        @apply flex shrink-0 justify-end gap-2 border-t px-4 py-3;
+        border-color: #eadfcc;
+    }
+
+    .rfm-sku-create-preview-cancel {
+        @apply min-h-10 rounded-lg border px-4 text-sm font-bold;
+        border-color: #d9d4c8;
+        background: #fff;
+    }
+
+    .rfm-sku-create-preview-agree {
+        @apply min-h-10 rounded-lg px-4 text-sm font-black text-white;
+        background: #1f6f54;
+    }
+
+    .rfm-sku-create-preview-agree.is-busy,
+    .rfm-sku-create-preview-agree:disabled {
+        opacity: 0.65;
+        cursor: wait;
+    }
+
     /* Persistent "new sub-values go under these mains" scope on a sub-main field */
     .rfm-chip-main-scope {
         @apply mb-2 flex flex-wrap items-center gap-2 rounded-[10px] border px-2.5 py-2;
@@ -11765,10 +11852,11 @@
         color: #1d6f5f;
     }
 
-    .rfm-variant-create-bar {
+    .rfm-variant-create-bar:not([hidden]) {
         @apply mb-3 flex flex-col gap-3 rounded-[12px] border p-3 sm:flex-row sm:items-center sm:justify-between;
         border-color: rgba(29, 111, 95, 0.35);
         background: linear-gradient(135deg, rgba(216, 239, 232, 0.55) 0%, rgba(255, 253, 248, 0.95) 100%);
+        cursor: pointer;
     }
 
     .rfm-variant-create-bar-copy strong {

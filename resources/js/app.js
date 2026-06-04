@@ -5850,7 +5850,9 @@ const removeSellableSkusForOptionFromRoot = (root, optionId) => {
 const initVariantModelChips = (root, csrf, showToast) => {
     const bulkUrl = root.dataset.rfmVariantOptionsBulkUrl;
     const createNewSkusUrl = root.dataset.rfmCreateNewSkusUrl;
+    const previewNewSkusUrl = root.dataset.rfmPreviewNewSkusUrl;
     const destroyUrlTemplate = root.dataset.rfmVariantOptionsDestroyUrlTemplate;
+    const createBtnDefaultLabel = 'Review & create sellable SKUs';
     if (!bulkUrl) return;
 
     const createBar = root.querySelector('[data-rfm-variant-create-bar]');
@@ -6488,7 +6490,7 @@ const initVariantModelChips = (root, csrf, showToast) => {
             createBtn.classList.add('is-busy');
         }
 
-        const originalBtnLabel = createBtn?.textContent;
+        const originalBtnLabel = createBtn?.textContent || createBtnDefaultLabel;
         if (createBtn) createBtn.textContent = 'Creating…';
 
         const formData = new FormData();
@@ -6535,13 +6537,222 @@ const initVariantModelChips = (root, csrf, showToast) => {
             if (createBtn) {
                 createBtn.disabled = false;
                 createBtn.classList.remove('is-busy');
-                if (originalBtnLabel) createBtn.textContent = originalBtnLabel;
+                createBtn.textContent = originalBtnLabel || createBtnDefaultLabel;
             }
             updateCreateBar();
         }
     };
 
     const closeLengthPicker = () => document.querySelector('.rfm-length-picker-backdrop')?.remove();
+    const closeSellableCreateReview = () => document.querySelector('.rfm-sku-create-preview-backdrop')?.remove();
+
+    const buildCreateSkusFormData = (optionIds, mainOptionIds = [], subOptionIds = []) => {
+        const formData = new FormData();
+        formData.append('_token', csrf);
+        optionIds.forEach((id, index) => formData.append(`option_ids[${index}]`, String(id)));
+        mainOptionIds.forEach((id, index) => formData.append(`main_option_ids[${index}]`, String(id)));
+        subOptionIds.forEach((id, index) => formData.append(`sub_option_ids[${index}]`, String(id)));
+
+        return formData;
+    };
+
+    const fetchCreatePreview = async (batch) => {
+        const response = await fetch(previewNewSkusUrl, {
+            method: 'POST',
+            body: buildCreateSkusFormData(
+                batch.optionIds,
+                batch.mainOptionIds || [],
+                batch.subOptionIds || [],
+            ),
+            headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+            throw new Error(data.message || 'Could not load preview.');
+        }
+
+        return data;
+    };
+
+    const mergePreviewPayloads = (payloads) => {
+        const first = payloads[0] || {};
+
+        return {
+            family_display_name: first.family_display_name || '',
+            family_price_label: first.family_price_label || '',
+            retail_price: first.retail_price ?? null,
+            to_create: payloads.flatMap((payload) => payload.to_create || []),
+            already_exist: payloads.flatMap((payload) => payload.already_exist || []),
+            create_count: payloads.reduce((sum, payload) => sum + (Number(payload.create_count) || 0), 0),
+            skipped_existing: payloads.reduce((sum, payload) => sum + (Number(payload.skipped_existing) || 0), 0),
+        };
+    };
+
+    const showSellableCreateReview = (preview, onConfirm) => {
+        closeSellableCreateReview();
+
+        const createCount = Number(preview.create_count) || 0;
+        if (createCount <= 0) {
+            const skipped = Number(preview.skipped_existing) || 0;
+            showToast(
+                skipped > 0
+                    ? 'These combinations already have sellable SKUs — nothing new to create.'
+                    : 'No sellable products are ready to create.',
+                true,
+            );
+
+            return;
+        }
+
+        const backdrop = document.createElement('div');
+        backdrop.className = 'rfm-sku-create-preview-backdrop';
+
+        const panel = document.createElement('div');
+        panel.className = 'rfm-sku-create-preview';
+        panel.setAttribute('role', 'dialog');
+        panel.setAttribute('aria-modal', 'true');
+        panel.setAttribute('aria-labelledby', 'rfm-sku-create-preview-title');
+
+        const title = document.createElement('h2');
+        title.id = 'rfm-sku-create-preview-title';
+        title.className = 'rfm-sku-create-preview-title';
+        title.textContent = createCount === 1
+            ? '1 sellable product ready'
+            : `${createCount} sellable products ready`;
+        panel.append(title);
+
+        const meta = document.createElement('div');
+        meta.className = 'rfm-sku-create-preview-meta';
+        const familyLine = document.createElement('p');
+        familyLine.innerHTML = `<strong>Family</strong> ${preview.family_display_name || '—'}`;
+        const priceLine = document.createElement('p');
+        priceLine.innerHTML = `<strong>Price</strong> ${preview.family_price_label || '—'}`;
+        meta.append(familyLine, priceLine);
+        panel.append(meta);
+
+        const list = document.createElement('ul');
+        list.className = 'rfm-sku-create-preview-list';
+        (preview.to_create || []).forEach((row) => {
+            const item = document.createElement('li');
+            item.className = 'rfm-sku-create-preview-item';
+
+            const name = document.createElement('span');
+            name.className = 'rfm-sku-create-preview-name';
+            name.textContent = row.name || 'Sellable product';
+
+            const variants = document.createElement('span');
+            variants.className = 'rfm-sku-create-preview-variants';
+            variants.textContent = row.variants || '';
+
+            const price = document.createElement('span');
+            price.className = 'rfm-sku-create-preview-price';
+            if (row.retail_price_label) {
+                price.textContent = row.retail_price_label;
+            } else if (row.needs_price) {
+                price.textContent = 'Price to set after create';
+                price.classList.add('is-missing');
+            }
+
+            item.append(name, variants, price);
+            list.append(item);
+        });
+        panel.append(list);
+
+        const alreadyExist = preview.already_exist || [];
+        if (alreadyExist.length > 0) {
+            const skipNote = document.createElement('p');
+            skipNote.className = 'rfm-sku-create-preview-skip';
+            skipNote.textContent = `${alreadyExist.length} combination${alreadyExist.length === 1 ? '' : 's'} already exist and will be skipped.`;
+            panel.append(skipNote);
+        }
+
+        const actions = document.createElement('div');
+        actions.className = 'rfm-sku-create-preview-actions';
+
+        const cancelBtn = document.createElement('button');
+        cancelBtn.type = 'button';
+        cancelBtn.className = 'rfm-sku-create-preview-cancel';
+        cancelBtn.textContent = 'Cancel';
+
+        const agreeBtn = document.createElement('button');
+        agreeBtn.type = 'button';
+        agreeBtn.className = 'rfm-sku-create-preview-agree';
+        agreeBtn.textContent = createCount === 1
+            ? 'Create 1 sellable'
+            : `Create ${createCount} sellables`;
+
+        actions.append(cancelBtn, agreeBtn);
+        panel.append(actions);
+        backdrop.append(panel);
+        document.body.appendChild(backdrop);
+
+        const onKeydown = (event) => {
+            if (event.key === 'Escape') {
+                closeSellableCreateReview();
+            }
+        };
+        document.addEventListener('keydown', onKeydown, { once: true });
+
+        cancelBtn.addEventListener('click', closeSellableCreateReview);
+        backdrop.addEventListener('click', (event) => {
+            if (event.target === backdrop) {
+                closeSellableCreateReview();
+            }
+        });
+        agreeBtn.addEventListener('click', async () => {
+            agreeBtn.disabled = true;
+            agreeBtn.classList.add('is-busy');
+            cancelBtn.disabled = true;
+            try {
+                await onConfirm();
+                closeSellableCreateReview();
+            } catch (err) {
+                showToast(err.message || 'Could not create sellable products.', true);
+            } finally {
+                agreeBtn.disabled = false;
+                agreeBtn.classList.remove('is-busy');
+                cancelBtn.disabled = false;
+            }
+        });
+
+        agreeBtn.focus();
+    };
+
+    const openCreateReviewForBatches = async (batches) => {
+        const normalized = (batches || []).filter((batch) => batch?.optionIds?.length);
+        if (!normalized.length) {
+            return;
+        }
+
+        if (!previewNewSkusUrl) {
+            for (const batch of normalized) {
+                await runCreateSellableSkus(
+                    batch.optionIds,
+                    batch.mainOptionIds || [],
+                    batch.subOptionIds || [],
+                );
+            }
+
+            return;
+        }
+
+        try {
+            const payloads = await Promise.all(normalized.map((batch) => fetchCreatePreview(batch)));
+            const preview = mergePreviewPayloads(payloads);
+
+            showSellableCreateReview(preview, async () => {
+                for (const batch of normalized) {
+                    await runCreateSellableSkus(
+                        batch.optionIds,
+                        batch.mainOptionIds || [],
+                        batch.subOptionIds || [],
+                    );
+                }
+            });
+        } catch (err) {
+            showToast(err.message || 'Could not load preview.', true);
+        }
+    };
 
     // Role-aware placement picker. When a family has multiple main values, creating
     // a SKU for a new value is ambiguous, so we ask the COMPLEMENTARY-axis question:
@@ -6601,7 +6812,7 @@ const initVariantModelChips = (root, csrf, showToast) => {
         const create = document.createElement('button');
         create.type = 'button';
         create.className = 'rfm-length-picker-create';
-        create.textContent = 'Create';
+        create.textContent = 'Continue';
         actions.append(cancel, create);
         pop.appendChild(actions);
 
@@ -6621,9 +6832,9 @@ const initVariantModelChips = (root, csrf, showToast) => {
             closeLengthPicker();
             if (!chosen.length) return;
             if (isSub) {
-                await runCreateSellableSkus(optionIds, chosen, []);
+                await openCreateReviewForBatches([{ optionIds, mainOptionIds: chosen, subOptionIds: [] }]);
             } else {
-                await runCreateSellableSkus(optionIds, [], chosen);
+                await openCreateReviewForBatches([{ optionIds, mainOptionIds: [], subOptionIds: chosen }]);
             }
         });
     };
@@ -6645,71 +6856,106 @@ const initVariantModelChips = (root, csrf, showToast) => {
         createBtn?.focus({ preventScroll: true });
     };
 
-    const createSellablesForField = async (field, optionIds) => {
-        const ids = (optionIds || []).map(Number).filter((id) => id > 0);
-        if (!ids.length) {
-            return;
+    const collectPendingCreateBatches = () => {
+        const pendingIds = pendingOptionIds();
+        if (!pendingIds.length) {
+            return [];
         }
 
-        const role = field?.dataset.groupRole || '';
-        const label = ids
-            .map((id) => root.querySelector(`[data-rfm-vchip][data-option-id="${id}"]`)?.dataset.chipLabel)
-            .filter(Boolean)
-            .join(', ') || 'values';
-        const anchorEl = createBar || field?.querySelector('[data-rfm-variant-chip-input]') || field;
-
-        if (role === 'sub_main' && mainAxisOptions.length >= 2) {
-            const scopeMains = selectedScopeMains(field);
-            if (scopeMains !== null) {
-                if (!scopeMains.length) {
-                    showToast(
-                        `Tick at least one ${mainAxisName} above to create sellables for ${field.dataset.groupName || 'these values'}.`,
-                        true,
-                    );
-                    return;
-                }
-
-                await runCreateSellableSkus(ids, scopeMains, []);
+        const byField = new Map();
+        pendingIds.forEach((id) => {
+            const chip = root.querySelector(`[data-rfm-vchip][data-option-id="${id}"]`);
+            const field = chip?.closest('[data-rfm-variant-chip-field]');
+            const groupId = field?.dataset.groupId || '';
+            if (!groupId || !field) {
                 return;
             }
 
-            showPlacementPicker({ optionIds: ids, mode: 'sub', anchorEl, label, covered: [] });
+            if (!byField.has(groupId)) {
+                byField.set(groupId, { field, ids: [] });
+            }
+            byField.get(groupId).ids.push(id);
+        });
+
+        return [...byField.values()];
+    };
+
+    const startPendingCreateFlow = async () => {
+        const groups = collectPendingCreateBatches();
+        if (!groups.length) {
             return;
         }
 
-        if (role === 'main' && subAxisOptions.length >= 2) {
-            showPlacementPicker({ optionIds: ids, mode: 'main', anchorEl, label, covered: [] });
-            return;
+        const readyBatches = [];
+        for (const { field, ids } of groups) {
+            const role = field?.dataset.groupRole || '';
+
+            if (role === 'sub_main' && mainAxisOptions.length >= 2) {
+                const scopeMains = selectedScopeMains(field);
+                if (scopeMains !== null) {
+                    if (!scopeMains.length) {
+                        showToast(
+                            `Tick at least one ${mainAxisName} above to create sellables for ${field.dataset.groupName || 'these values'}.`,
+                            true,
+                        );
+                        return;
+                    }
+
+                    readyBatches.push({ optionIds: ids, mainOptionIds: scopeMains, subOptionIds: [] });
+                    continue;
+                }
+
+                const label = ids
+                    .map((id) => root.querySelector(`[data-rfm-vchip][data-option-id="${id}"]`)?.dataset.chipLabel)
+                    .filter(Boolean)
+                    .join(', ') || 'values';
+                showPlacementPicker({
+                    optionIds: ids,
+                    mode: 'sub',
+                    anchorEl: createBar || field,
+                    label,
+                    covered: [],
+                });
+                return;
+            }
+
+            if (role === 'main' && subAxisOptions.length >= 2) {
+                const label = ids
+                    .map((id) => root.querySelector(`[data-rfm-vchip][data-option-id="${id}"]`)?.dataset.chipLabel)
+                    .filter(Boolean)
+                    .join(', ') || 'values';
+                showPlacementPicker({
+                    optionIds: ids,
+                    mode: 'main',
+                    anchorEl: createBar || field,
+                    label,
+                    covered: [],
+                });
+                return;
+            }
+
+            readyBatches.push({ optionIds: ids, mainOptionIds: [], subOptionIds: [] });
         }
 
-        await runCreateSellableSkus(ids);
+        if (readyBatches.length) {
+            await openCreateReviewForBatches(readyBatches);
+        }
     };
 
     if (createBtn && createNewSkusUrl) {
-        createBtn.addEventListener('click', async () => {
-            const pendingIds = pendingOptionIds();
-            if (!pendingIds.length) {
+        createBtn.addEventListener('click', startPendingCreateFlow);
+    }
+
+    if (createBar && createBtn) {
+        createBar.addEventListener('click', (event) => {
+            if (event.target.closest('[data-rfm-create-new-skus]')) {
                 return;
             }
-
-            const byField = new Map();
-            pendingIds.forEach((id) => {
-                const chip = root.querySelector(`[data-rfm-vchip][data-option-id="${id}"]`);
-                const field = chip?.closest('[data-rfm-variant-chip-field]');
-                const groupId = field?.dataset.groupId || '';
-                if (!groupId || !field) {
-                    return;
-                }
-
-                if (!byField.has(groupId)) {
-                    byField.set(groupId, { field, ids: [] });
-                }
-                byField.get(groupId).ids.push(id);
-            });
-
-            for (const { field, ids } of byField.values()) {
-                await createSellablesForField(field, ids);
+            if (createBtn.disabled || createBtn.classList.contains('is-busy')) {
+                return;
             }
+            event.preventDefault();
+            startPendingCreateFlow();
         });
     }
 
@@ -6783,6 +7029,9 @@ const initVariantModelChips = (root, csrf, showToast) => {
         if (pendingChip && !event.target.closest('[data-rfm-vchip-delete]')) {
             event.preventDefault();
             focusCreateBar();
+            if (createBtn && !createBtn.disabled) {
+                startPendingCreateFlow();
+            }
             return;
         }
 

@@ -491,123 +491,44 @@ class RetailProductController extends Controller
     }
 
     /**
+     * Preview sellable SKUs that would be created for new variant values.
+     */
+    public function previewSkusForNewVariantOptions(Request $request, ProductFamily $family): JsonResponse
+    {
+        try {
+            $resolved = $this->resolveNewVariantSkuCreateRequest($request, $family);
+            if ($resolved instanceof JsonResponse) {
+                return $resolved;
+            }
+
+            return response()->json($this->previewNewVariantSkusPayload($resolved));
+        } catch (ValidationException $exception) {
+            throw $exception;
+        } catch (\Throwable $exception) {
+            report($exception);
+
+            return response()->json([
+                'message' => 'Could not preview sellable products. '.$exception->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
      * Create sellable SKUs for combinations that use newly added variant values.
      * Uses the same family naming, description, and shared pricing as existing SKUs.
      */
     public function createSkusForNewVariantOptions(Request $request, ProductFamily $family): JsonResponse
     {
         try {
-            $data = $request->validate([
-                'option_ids' => ['required', 'array', 'min:1'],
-                'option_ids.*' => ['integer'],
-                'main_option_ids' => ['nullable', 'array'],
-                'main_option_ids.*' => ['integer'],
-                'sub_option_ids' => ['nullable', 'array'],
-                'sub_option_ids.*' => ['integer'],
-            ]);
-
-            $family->load([
-                'brand',
-                'catalogueStyle',
-                'categoryAssignments',
-                'variantGroups.options',
-                'products.price',
-                'products.variantValues.option',
-                'products.variantValues.group',
-                'ecommerceProfile',
-            ]);
-
-            foreach ($family->variantGroups as $variantGroup) {
-                if ($variantGroup->options->isEmpty()) {
-                    return response()->json([
-                        'message' => "Cannot create SKUs: the \"{$variantGroup->name}\" axis has no values yet.",
-                    ], 422);
-                }
+            $resolved = $this->resolveNewVariantSkuCreateRequest($request, $family);
+            if ($resolved instanceof JsonResponse) {
+                return $resolved;
             }
 
-            $optionIds = collect($data['option_ids'])
-                ->map(fn (mixed $id): int => (int) $id)
-                ->filter(fn (int $id): bool => $id > 0)
-                ->unique()
-                ->values();
-
-            $validOptionIds = ProductVariantOption::query()
-                ->whereIn('id', $optionIds->all())
-                ->whereIn('product_variant_group_id', $family->variantGroups->pluck('id'))
-                ->pluck('id')
-                ->map(fn (mixed $id): int => (int) $id)
-                ->values();
-
-            if ($validOptionIds->isEmpty()) {
-                return response()->json(['message' => 'No valid variant values were selected.'], 422);
-            }
-
-            if ($family->products->isEmpty()) {
-                return response()->json([
-                    'message' => 'Add at least one sellable SKU manually first (main + common variants set), then new sub-variant values can extend it.',
-                ], 422);
-            }
-
-            // Role-aware placement filters:
-            //  - adding a SUB value (Colour) -> main_option_ids = which mains (Lengths) it goes under
-            //  - adding a MAIN value (Length) -> sub_option_ids = which subs (Colours) go under it
-            $axes = RetailFamilyVariantAxes::forFamily($family, $family->products);
-            $mainOptionIds = [];
-            if (! empty($data['main_option_ids']) && $axes->mainGroup !== null) {
-                $allowedMainIds = $axes->mainGroup->options->pluck('id')->map(fn ($id): int => (int) $id);
-                $mainOptionIds = collect($data['main_option_ids'])
-                    ->map(fn ($id): int => (int) $id)
-                    ->filter(fn (int $id): bool => $allowedMainIds->contains($id))
-                    ->unique()
-                    ->values()
-                    ->all();
-            }
-
-            $subOptionIds = [];
-            if (! empty($data['sub_option_ids'])) {
-                $allowedSubIds = $family->variantGroups
-                    ->filter(fn (ProductVariantGroup $group): bool => $axes->isSubGroup((int) $group->id))
-                    ->flatMap(fn (ProductVariantGroup $group) => $group->options->pluck('id'))
-                    ->map(fn ($id): int => (int) $id);
-                $subOptionIds = collect($data['sub_option_ids'])
-                    ->map(fn ($id): int => (int) $id)
-                    ->filter(fn (int $id): bool => $allowedSubIds->contains($id))
-                    ->unique()
-                    ->values()
-                    ->all();
-            }
-
-            $selectedOptions = $family->variantGroups
-                ->flatMap(fn (ProductVariantGroup $group) => $group->options)
-                ->whereIn('id', $validOptionIds->all())
-                ->values();
-
-            $hasNewSubOption = $selectedOptions->contains(
-                fn (ProductVariantOption $option): bool => $axes->isSubGroup((int) $option->product_variant_group_id),
-            );
-            $requiresMainScope = $hasNewSubOption
-                && $axes->mainGroup !== null
-                && $axes->mainGroup->options->count() > 1;
-
-            if ($requiresMainScope && $mainOptionIds === []) {
-                return response()->json([
-                    'message' => 'Choose which '.$axes->mainGroup->name.' value(s) this new sub-variant should go under before creating sellable SKUs.',
-                ], 422);
-            }
-
-            $hasNewMainOption = $axes->mainGroup !== null
-                && $selectedOptions->contains(
-                    fn (ProductVariantOption $option): bool => (int) $option->product_variant_group_id === (int) $axes->mainGroup->id,
-                );
-            $subOptionCount = $family->variantGroups
-                ->filter(fn (ProductVariantGroup $group): bool => $axes->isSubGroup((int) $group->id))
-                ->sum(fn (ProductVariantGroup $group): int => $group->options->count());
-
-            if ($hasNewMainOption && $subOptionCount > 1 && $subOptionIds === []) {
-                return response()->json([
-                    'message' => 'Choose which sub-variant value(s) should go under this new '.$axes->mainGroup->name.' before creating sellable SKUs.',
-                ], 422);
-            }
+            $family = $resolved['family'];
+            $validOptionIds = $resolved['valid_option_ids'];
+            $mainOptionIds = $resolved['main_option_ids'];
+            $subOptionIds = $resolved['sub_option_ids'];
 
             $existingSignatures = $this->existingFamilyVariantSignatures($family);
             $defaultOpts = $this->defaultSellableProductOpts($family);
@@ -700,6 +621,230 @@ class RetailProductController extends Controller
                 'message' => 'Could not create sellable products. '.$exception->getMessage(),
             ], 500);
         }
+    }
+
+    /**
+     * @return array{
+     *     family: ProductFamily,
+     *     valid_option_ids: Collection<int, int>,
+     *     main_option_ids: list<int>,
+     *     sub_option_ids: list<int>,
+     * }|JsonResponse
+     */
+    private function resolveNewVariantSkuCreateRequest(Request $request, ProductFamily $family): array|JsonResponse
+    {
+        $data = $request->validate([
+            'option_ids' => ['required', 'array', 'min:1'],
+            'option_ids.*' => ['integer'],
+            'main_option_ids' => ['nullable', 'array'],
+            'main_option_ids.*' => ['integer'],
+            'sub_option_ids' => ['nullable', 'array'],
+            'sub_option_ids.*' => ['integer'],
+        ]);
+
+        $family->load([
+            'brand',
+            'catalogueStyle',
+            'categoryAssignments',
+            'variantGroups.options',
+            'products.price',
+            'products.variantValues.option',
+            'products.variantValues.group',
+            'ecommerceProfile',
+        ]);
+
+        foreach ($family->variantGroups as $variantGroup) {
+            if ($variantGroup->options->isEmpty()) {
+                return response()->json([
+                    'message' => "Cannot create SKUs: the \"{$variantGroup->name}\" axis has no values yet.",
+                ], 422);
+            }
+        }
+
+        $optionIds = collect($data['option_ids'])
+            ->map(fn (mixed $id): int => (int) $id)
+            ->filter(fn (int $id): bool => $id > 0)
+            ->unique()
+            ->values();
+
+        $validOptionIds = ProductVariantOption::query()
+            ->whereIn('id', $optionIds->all())
+            ->whereIn('product_variant_group_id', $family->variantGroups->pluck('id'))
+            ->pluck('id')
+            ->map(fn (mixed $id): int => (int) $id)
+            ->values();
+
+        if ($validOptionIds->isEmpty()) {
+            return response()->json(['message' => 'No valid variant values were selected.'], 422);
+        }
+
+        if ($family->products->isEmpty()) {
+            return response()->json([
+                'message' => 'Add at least one sellable SKU manually first (main + common variants set), then new sub-variant values can extend it.',
+            ], 422);
+        }
+
+        $axes = RetailFamilyVariantAxes::forFamily($family, $family->products);
+        $mainOptionIds = [];
+        if (! empty($data['main_option_ids']) && $axes->mainGroup !== null) {
+            $allowedMainIds = $axes->mainGroup->options->pluck('id')->map(fn ($id): int => (int) $id);
+            $mainOptionIds = collect($data['main_option_ids'])
+                ->map(fn ($id): int => (int) $id)
+                ->filter(fn (int $id): bool => $allowedMainIds->contains($id))
+                ->unique()
+                ->values()
+                ->all();
+        }
+
+        $subOptionIds = [];
+        if (! empty($data['sub_option_ids'])) {
+            $allowedSubIds = $family->variantGroups
+                ->filter(fn (ProductVariantGroup $group): bool => $axes->isSubGroup((int) $group->id))
+                ->flatMap(fn (ProductVariantGroup $group) => $group->options->pluck('id'))
+                ->map(fn ($id): int => (int) $id);
+            $subOptionIds = collect($data['sub_option_ids'])
+                ->map(fn ($id): int => (int) $id)
+                ->filter(fn (int $id): bool => $allowedSubIds->contains($id))
+                ->unique()
+                ->values()
+                ->all();
+        }
+
+        $selectedOptions = $family->variantGroups
+            ->flatMap(fn (ProductVariantGroup $group) => $group->options)
+            ->whereIn('id', $validOptionIds->all())
+            ->values();
+
+        $hasNewSubOption = $selectedOptions->contains(
+            fn (ProductVariantOption $option): bool => $axes->isSubGroup((int) $option->product_variant_group_id),
+        );
+        $requiresMainScope = $hasNewSubOption
+            && $axes->mainGroup !== null
+            && $axes->mainGroup->options->count() > 1;
+
+        if ($requiresMainScope && $mainOptionIds === []) {
+            return response()->json([
+                'message' => 'Choose which '.$axes->mainGroup->name.' value(s) this new sub-variant should go under before creating sellable SKUs.',
+            ], 422);
+        }
+
+        $hasNewMainOption = $axes->mainGroup !== null
+            && $selectedOptions->contains(
+                fn (ProductVariantOption $option): bool => (int) $option->product_variant_group_id === (int) $axes->mainGroup->id,
+            );
+        $subOptionCount = $family->variantGroups
+            ->filter(fn (ProductVariantGroup $group): bool => $axes->isSubGroup((int) $group->id))
+            ->sum(fn (ProductVariantGroup $group): int => $group->options->count());
+
+        if ($hasNewMainOption && $subOptionCount > 1 && $subOptionIds === []) {
+            return response()->json([
+                'message' => 'Choose which sub-variant value(s) should go under this new '.$axes->mainGroup->name.' before creating sellable SKUs.',
+            ], 422);
+        }
+
+        return [
+            'family' => $family,
+            'valid_option_ids' => $validOptionIds,
+            'main_option_ids' => $mainOptionIds,
+            'sub_option_ids' => $subOptionIds,
+        ];
+    }
+
+    /**
+     * @param  array{
+     *     family: ProductFamily,
+     *     valid_option_ids: Collection<int, int>,
+     *     main_option_ids: list<int>,
+     *     sub_option_ids: list<int>,
+     * }  $resolved
+     * @return array{
+     *     family_display_name: string,
+     *     family_price_label: string,
+     *     retail_price: ?float,
+     *     to_create: list<array{name: string, variants: string, retail_price: ?float, retail_price_label: ?string, needs_price: bool}>,
+     *     already_exist: list<array{name: string, variants: string, retail_price: ?float, retail_price_label: ?string, sku: ?string}>,
+     *     create_count: int,
+     *     skipped_existing: int,
+     * }
+     */
+    private function previewNewVariantSkusPayload(array $resolved): array
+    {
+        $family = $resolved['family'];
+        $validOptionIds = $resolved['valid_option_ids'];
+        $mainOptionIds = $resolved['main_option_ids'];
+        $subOptionIds = $resolved['sub_option_ids'];
+
+        $existingSignatures = $this->existingFamilyVariantSignatures($family);
+        $defaultOpts = $this->defaultSellableProductOpts($family);
+        $retailPrice = isset($defaultOpts['retail_price']) && $defaultOpts['retail_price'] !== null
+            ? (float) $defaultOpts['retail_price']
+            : null;
+
+        $toCreate = [];
+        $alreadyExist = [];
+        $groupsById = $family->variantGroups->keyBy('id');
+
+        foreach (RetailFamilySellableCombinations::forNewVariantOptions($family, $validOptionIds, $mainOptionIds, $subOptionIds) as $combo) {
+            $signature = RetailFamilySellableCombinations::variantSignature($family, collect($combo));
+            $variants = collect($combo)
+                ->sortBy(function (ProductVariantOption $option) use ($groupsById): string {
+                    $group = $groupsById->get((int) $option->product_variant_group_id);
+
+                    return sprintf(
+                        '%04d:%04d',
+                        (int) ($group?->sort_order ?? 9999),
+                        (int) $option->sort_order,
+                    );
+                })
+                ->map(function (ProductVariantOption $option) use ($groupsById): string {
+                    $group = $groupsById->get((int) $option->product_variant_group_id);
+
+                    return ($group?->name ?? 'Variant').': '.$option->label;
+                })
+                ->implode(' · ');
+            $name = $this->generatedRetailProductName($family, collect($combo));
+            $row = [
+                'name' => $name,
+                'variants' => $variants,
+                'retail_price' => $retailPrice,
+                'retail_price_label' => $this->formatRetailGbpPrice($retailPrice),
+                'needs_price' => $retailPrice === null,
+            ];
+
+            if (isset($existingSignatures[$signature])) {
+                $match = RetailFamilySellableCombinations::findProductForCombo($family, $combo);
+                $alreadyExist[] = array_merge($row, [
+                    'sku' => $match?->sku,
+                ]);
+
+                continue;
+            }
+
+            $toCreate[] = $row;
+        }
+
+        $familyPriceLabel = $retailPrice !== null
+            ? $this->formatRetailGbpPrice($retailPrice).' per SKU (from family)'
+            : 'No shared price yet — set in family details or on each SKU after create';
+
+        return [
+            'family_display_name' => $this->familyDisplayBaseName($family),
+            'family_price_label' => $familyPriceLabel,
+            'retail_price' => $retailPrice,
+            'to_create' => $toCreate,
+            'already_exist' => $alreadyExist,
+            'create_count' => count($toCreate),
+            'skipped_existing' => count($alreadyExist),
+        ];
+    }
+
+    private function formatRetailGbpPrice(?float $amount): ?string
+    {
+        if ($amount === null) {
+            return null;
+        }
+
+        return '£'.number_format($amount, 2);
     }
 
     /**
