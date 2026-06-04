@@ -2368,29 +2368,34 @@ class RetailProductController extends Controller
 
     /**
      * Delete a variant option that belongs to this family.
-     * Refuses if any sellable product still references the option.
+     * Permanently deletes every sellable SKU that still uses this value, then removes the option.
      */
     public function destroyFamilyVariantOption(ProductFamily $family, ProductVariantOption $option): JsonResponse
     {
         $group = $this->familyVariantGroup($family, (int) $option->product_variant_group_id);
 
-        $inUseCount = ProductVariantValue::query()
-            ->where('product_variant_option_id', $option->id)
-            ->count();
-
-        if ($inUseCount > 0) {
-            throw ValidationException::withMessages([
-                'option' => "Cannot delete: \"{$option->label}\" is still used by {$inUseCount} sellable product"
-                    .($inUseCount === 1 ? '' : 's').'.',
-            ]);
-        }
-
+        $products = $this->familyProductsUsingVariantOption($family, $option);
+        $skuCount = $products->count();
         $label = $option->label;
-        $option->delete();
+        $optionId = $option->id;
+
+        DB::transaction(function () use ($products, $option): void {
+            foreach ($products as $product) {
+                $this->deleteSellableProduct($product);
+            }
+
+            $option->delete();
+        });
+
+        $message = $skuCount > 0
+            ? "Removed \"{$label}\" from {$group->name} and deleted {$skuCount} sellable SKU"
+                .($skuCount === 1 ? '' : 's').'.'
+            : "Removed \"{$label}\" from {$group->name}.";
 
         return response()->json([
-            'message' => "Removed \"{$label}\" from {$group->name}.",
-            'deleted_option_id' => $option->id,
+            'message' => $message,
+            'deleted_option_id' => $optionId,
+            'deleted_sku_count' => $skuCount,
         ]);
     }
 

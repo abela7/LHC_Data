@@ -5822,6 +5822,27 @@ const initVariantOptionCreateSkus = (root) => {
     });
 };
 
+const removeSellableSkusForOptionFromRoot = (root, optionId) => {
+    const id = String(optionId);
+    root.querySelectorAll('[data-rfm-sku]').forEach((skuRow) => {
+        const optionIds = (skuRow.dataset.rfmVariantOptions || '').split(/\s+/).filter(Boolean);
+        if (optionIds.includes(id)) {
+            skuRow.remove();
+        }
+    });
+    root.querySelectorAll('[data-rfm-sku-group]').forEach((group) => {
+        const remaining = group.querySelectorAll('[data-rfm-sku]').length;
+        if (remaining === 0) {
+            group.remove();
+            return;
+        }
+        const countEl = group.querySelector('.rfm-sku-group-count');
+        if (countEl) {
+            countEl.textContent = `${remaining} SKU${remaining === 1 ? '' : 's'}`;
+        }
+    });
+};
+
 // Variant model: comma / Enter chip entry — silent save, batch create sellable SKUs when ready
 const initVariantModelChips = (root, csrf, showToast) => {
     const bulkUrl = root.dataset.rfmVariantOptionsBulkUrl;
@@ -6051,6 +6072,7 @@ const initVariantModelChips = (root, csrf, showToast) => {
     };
 
     const removeOptionEverywhere = (optionId) => {
+        removeSellableSkusForOptionFromRoot(root, optionId);
         root.querySelectorAll(`[data-rfm-vchip][data-option-id="${optionId}"]`).forEach((chip) => chip.remove());
         root.querySelectorAll(`[data-rfm-manage-row][data-option-id="${optionId}"]`).forEach((row) => row.remove());
         root.querySelectorAll(`[data-rfm-variant-select] option[value="${optionId}"]`).forEach((option) => {
@@ -6069,6 +6091,10 @@ const initVariantModelChips = (root, csrf, showToast) => {
         });
         updateCreateBar();
     };
+
+    const confirmRemoveVariantOption = (label) => window.confirm(
+        `Remove "${label}" from this variant group?\n\nAny sellable SKUs that use this value will be deleted permanently. This cannot be undone.`,
+    );
 
     const buildPersistedChip = (option, sellable, isNew = true) => {
         const chip = document.createElement('span');
@@ -6484,7 +6510,7 @@ const initVariantModelChips = (root, csrf, showToast) => {
         const label = chip?.dataset.chipLabel || chip?.querySelector('.rfm-vchip-label')?.textContent || 'this value';
         if (!optionId || !destroyUrlTemplate) return;
 
-        if (!window.confirm(`Remove "${label}" from this variant group?`)) return;
+        if (!confirmRemoveVariantOption(label)) return;
 
         btn.disabled = true;
         chip.classList.add('is-saving');
@@ -6512,6 +6538,10 @@ const initVariantModelChips = (root, csrf, showToast) => {
             btn.disabled = false;
             showToast(err.message || 'Could not remove value.', true);
         }
+    });
+
+    root.addEventListener('rfm-variant-option-removed', () => {
+        updateCreateBar();
     });
 
     root.addEventListener('rfm-variant-option-added', (event) => {
@@ -6757,6 +6787,7 @@ const initVariantOptionManagers = (root, csrf, showToast) => {
     };
 
     const removeOptionEverywhere = (groupId, optionId) => {
+        root.querySelectorAll(`[data-rfm-vchip][data-option-id="${optionId}"]`).forEach((chip) => chip.remove());
         document.querySelectorAll(`[data-rfm-variant-axis][data-group-id="${groupId}"] [data-rfm-variant-select]`).forEach((select) => {
             const opt = select.querySelector(`option[value="${optionId}"]`);
             if (opt) {
@@ -6764,6 +6795,10 @@ const initVariantOptionManagers = (root, csrf, showToast) => {
                 opt.remove();
             }
         });
+        root.dispatchEvent(new CustomEvent('rfm-variant-option-removed', {
+            bubbles: true,
+            detail: { groupId, optionId: Number(optionId) },
+        }));
     };
 
     const buildManageRow = (option) => {
@@ -6984,12 +7019,15 @@ const initVariantOptionManagers = (root, csrf, showToast) => {
 
         if (event.target === deleteBtn) {
             const label = labelEl.textContent || 'this value';
-            if (!window.confirm(`Remove "${label}" from ${activeGroupName}?`)) return;
+            if (!window.confirm(
+                `Remove "${label}" from ${activeGroupName}?\n\nAny sellable SKUs that use this value will be deleted permanently. This cannot be undone.`,
+            )) return;
             deleteBtn.disabled = true;
             try {
                 const data = await callJson(buildUrl(destroyUrlTemplate, optionId), 'DELETE', {});
                 row.remove();
                 sourceRow?.remove();
+                removeSellableSkusForOptionFromRoot(root, optionId);
                 removeOptionEverywhere(activeGroupId, optionId);
                 syncEmptyState();
                 showToast(data.message || 'Removed.');
