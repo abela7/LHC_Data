@@ -481,12 +481,11 @@
                                         <span>{{ $variantGroupTypeLabels[$group->variant_type] ?? str_replace(['_', '-'], ' ', $group->variant_type) }}</span>
                                     </div>
                                     <form method="POST"
-                                          action="{{ route('retail-products.families.variant-groups.destroy', [$family, $group]) }}"
+                                          action="{{ route('retail-products.families.variant-groups.destroy', ['family' => $family, 'variantGroup' => $group]) }}"
                                           onsubmit="return confirm(@js($groupUsedCount > 0
                                               ? 'Remove variant group '.$group->name.' and permanently delete '.$groupUsedCount.' sellable SKU'.($groupUsedCount === 1 ? '' : 's').' that use it? This cannot be undone.'
                                               : 'Remove variant group '.$group->name.'? Unused values under it will be removed too.'));">
                                         @csrf
-                                        @method('DELETE')
                                         <button type="submit"
                                                 class="rfm-variant-group-remove"
                                                 title="{{ $groupUsedCount > 0

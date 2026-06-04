@@ -1537,9 +1537,9 @@ class RetailProductController extends Controller
      * Remove a variant axis from this family.
      * Permanently deletes every sellable SKU that still stores a value on this axis.
      */
-    public function destroyFamilyVariantGroup(ProductFamily $family, ProductVariantGroup $group): RedirectResponse
+    public function destroyFamilyVariantGroup(ProductFamily $family, ProductVariantGroup $variantGroup): RedirectResponse
     {
-        $group = $this->familyVariantGroup($family, (int) $group->id);
+        $group = $this->familyVariantGroup($family, (int) $variantGroup->id);
 
         $products = $this->familyProductsUsingVariantGroup($family, $group);
         $skuCount = $products->count();
@@ -2099,9 +2099,7 @@ class RetailProductController extends Controller
             ->first();
 
         if (! $group) {
-            throw ValidationException::withMessages([
-                'product_variant_group_id' => 'That variant axis does not belong to this family.',
-            ]);
+            abort(404, 'That variant axis does not belong to this family.');
         }
 
         return $group;
