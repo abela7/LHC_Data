@@ -339,7 +339,7 @@
                         </div>
 
                         <div class="sw-publish-dock-actions">
-                            @if ($retailSkuTotal > 0 && $retailFamilyCount === 1 && $publishedFamily)
+                            @if ($retailSkuTotal > 0 && $publishedFamily)
                                 <a href="{{ route('retail-products.families.show', $publishedFamily) }}" class="sw-publish-action-secondary">
                                     View real products
                                 </a>
@@ -816,7 +816,7 @@
                             </label>
                         @endif
                         <div class="sw-sku-publish-row">
-                            @if ($retailSkuTotal > 0 && $retailFamilyCount === 1 && $publishedFamily)
+                            @if ($retailSkuTotal > 0 && $publishedFamily)
                                 <a href="{{ route('retail-products.families.show', $publishedFamily) }}" class="sw-btn sw-btn-sm sw-sku-view-retail">
                                     View retail ({{ $publishedFamily->products_count }})
                                 </a>
