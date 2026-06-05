@@ -60,6 +60,19 @@
                 <span>Prices, barcodes, photos, and SKU operations for the shop floor.</span>
                 <em>Open sellable</em>
             </a>
+
+            <a href="{{ route('shop.index') }}" target="_blank" rel="noopener" class="de-dashboard-card de-dashboard-card-shop">
+                <span class="de-dashboard-card-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M3 9l1.5-5h15L21 9"></path>
+                        <path d="M4 9v10a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V9"></path>
+                        <path d="M9 13h6"></path>
+                    </svg>
+                </span>
+                <strong>Shop (demo storefront)</strong>
+                <span>Public ecommerce preview — products with photos, shareable link.</span>
+                <em>Open shop ↗</em>
+            </a>
         </div>
 
         <footer class="de-dashboard-foot">
