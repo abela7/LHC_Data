@@ -182,9 +182,48 @@ class PinkCommerceBridge
             }
         }
 
-        // Already remote (e.g. supplier CDN): pass the URL through unchanged.
+        // Remote URL (e.g. supplier CDN): fetch + re-host into our R2 so we own
+        // the asset and don't break when suppliers rotate their URLs. The R2
+        // key is deterministic so a second push is a no-op (no re-download, no
+        // re-upload). If the fetch or upload fails we fall back to the original
+        // URL — better a working supplier URL than a broken image.
         if (! empty($media->external_url)) {
-            return (string) $media->external_url;
+            $url = (string) $media->external_url;
+            $mediaId = $media->id ?? md5($url);
+            $path = parse_url($url, PHP_URL_PATH) ?: '';
+            $ext = strtolower(pathinfo($path, PATHINFO_EXTENSION) ?: 'jpg');
+            // Drop anything weird (querystring chars, codepoints) — keep it
+            // alphanumeric so the R2 key is safe.
+            $ext = preg_replace('/[^a-z0-9]/', '', $ext) ?: 'jpg';
+            if (strlen($ext) > 8) {
+                $ext = 'jpg';
+            }
+            $key = "products/{$familyId}/{$mediaId}.{$ext}";
+
+            try {
+                if (! Storage::disk($disk)->exists($key)) {
+                    $response = Http::timeout(20)->get($url);
+                    if ($response->successful()) {
+                        $body = $response->body();
+                        if ($body !== '' && strlen($body) <= 25 * 1024 * 1024) {
+                            Storage::disk($disk)->put($key, $body, 'public');
+                        }
+                    }
+                }
+                if (Storage::disk($disk)->exists($key)) {
+                    return Storage::disk($disk)->url($key);
+                }
+            } catch (Throwable $e) {
+                Log::warning('PinkCommerce R2 rehost failed; falling back to supplier URL', [
+                    'media_id' => $media->id ?? null,
+                    'url' => $url,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+
+            // R2 unavailable for this image — keep the supplier URL so the
+            // product still has *something* to display.
+            return $url;
         }
 
         return null;
