@@ -124,6 +124,12 @@
     }
 
     $ecomPreviewData = [
+        'familyId' => (int) $family->id,
+        'familyManageUrl' => route('retail-products.families.show', $family),
+        'shopProductUrl' => route('shop.show', $family),
+        'lineShopUrl' => filled($family->line_name)
+            ? route('shop.index', ['line' => $family->line_name])
+            : null,
         'title' => $ecomPreviewTitle,
         'familyTitle' => $family->display_family_name,
         'titlePlaceholder' => 'Choose options to preview the ecommerce product title',

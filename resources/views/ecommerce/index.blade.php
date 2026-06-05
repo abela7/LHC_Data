@@ -3,9 +3,10 @@
 @section('title', 'Shop')
 
 @section('content')
+    @php($shopListQuery = array_filter(['line' => $activeLine ?? null]))
     <div class="store-grid-wrap">
         <div class="store-grid-head">
-            <h1 class="store-h1">Shop</h1>
+            <h1 class="store-h1">Shop@if (! empty($activeLine)) — {{ $activeLine }}@endif</h1>
             <p class="store-sub">{{ $cards->count() }} {{ $cards->count() === 1 ? 'product' : 'products' }}</p>
         </div>
 
@@ -16,7 +17,7 @@
             </summary>
             <div class="store-filters" role="tablist" aria-label="Filter products">
                 @foreach ($filters as $key => $label)
-                    <a href="{{ route('shop.index', $key === 'barcode' ? [] : ['filter' => $key]) }}"
+                    <a href="{{ route('shop.index', array_merge($shopListQuery, $key === 'barcode' ? [] : ['filter' => $key])) }}"
                        class="store-filter {{ $activeFilter === $key ? 'is-active' : '' }}">{{ $label }}</a>
                 @endforeach
             </div>

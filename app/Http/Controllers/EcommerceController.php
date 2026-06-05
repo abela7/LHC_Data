@@ -37,9 +37,15 @@ class EcommerceController extends Controller
         // A product has a real retail price.
         $pricedRelation = fn ($p) => $p->whereNotNull('retail_price');
 
+        $line = trim((string) $request->query('line', ''));
+
         $query = ProductFamily::query()
             ->with(['products.media', 'products.price', 'media', 'ecommerceProfile'])
             ->orderByDesc('id');
+
+        if ($line !== '') {
+            $query->where('line_name', $line);
+        }
 
         switch ($filter) {
             case 'barcode':
@@ -101,6 +107,7 @@ class EcommerceController extends Controller
             'cards' => $cards,
             'filters' => self::FILTERS,
             'activeFilter' => $filter,
+            'activeLine' => $line !== '' ? $line : null,
         ]);
     }
 

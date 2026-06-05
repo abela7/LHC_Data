@@ -38,11 +38,22 @@
         <div class="rfm-ecom-preview-scroll">
             <div class="rfm-ecom-preview-store">
                 <nav class="rfm-ecom-preview-breadcrumb" aria-label="Breadcrumb">
-                    <span>Home</span>
-                    <span aria-hidden="true">›</span>
-                    <span data-rfm-ecom-preview-breadcrumb-line>{{ $ecomPreviewData['line'] ?: ($ecomPreviewData['category'] ?: 'Shop') }}</span>
-                    <span aria-hidden="true">›</span>
-                    <span data-rfm-ecom-preview-breadcrumb>{{ $ecomPreviewData['familyTitle'] ?: $ecomPreviewData['title'] }}</span>
+                    <a href="{{ route('shop.index') }}">Home</a>
+                    <span class="rfm-ecom-preview-breadcrumb-sep" aria-hidden="true">›</span>
+                    @if (! empty($ecomPreviewData['lineShopUrl']) && ! empty($ecomPreviewData['line']))
+                        <a href="{{ $ecomPreviewData['lineShopUrl'] }}"
+                           data-rfm-ecom-preview-breadcrumb-line>{{ $ecomPreviewData['line'] }}</a>
+                    @else
+                        <span data-rfm-ecom-preview-breadcrumb-line>{{ $ecomPreviewData['line'] ?: ($ecomPreviewData['category'] ?: 'Shop') }}</span>
+                    @endif
+                    <span class="rfm-ecom-preview-breadcrumb-sep" aria-hidden="true">›</span>
+                    @if ($asPage)
+                        <span aria-current="page" data-rfm-ecom-preview-breadcrumb>{{ $ecomPreviewData['familyTitle'] ?: $ecomPreviewData['title'] }}</span>
+                    @elseif (! empty($ecomPreviewData['shopProductUrl']))
+                        <a href="{{ $ecomPreviewData['shopProductUrl'] }}" data-rfm-ecom-preview-breadcrumb>{{ $ecomPreviewData['familyTitle'] ?: $ecomPreviewData['title'] }}</a>
+                    @else
+                        <span data-rfm-ecom-preview-breadcrumb>{{ $ecomPreviewData['familyTitle'] ?: $ecomPreviewData['title'] }}</span>
+                    @endif
                 </nav>
 
                 <div class="rfm-ecom-preview-layout">
