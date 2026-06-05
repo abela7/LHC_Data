@@ -5572,13 +5572,35 @@ const initFamilyEcommercePreview = (root) => {
     const selectionComplete = () => allGroupIds.length === 0
         || allGroupIds.every((groupId) => selection.has(groupId));
 
+    const optionForGroup = (sku, groupId) => {
+        const map = sku?.optionsByGroup || {};
+        const key = String(groupId);
+
+        return map[groupId] ?? map[key] ?? null;
+    };
+
+    const skuMediaRank = (sku) => {
+        if (sku?.media?.main?.url) {
+            return 3;
+        }
+        if (sku?.media?.variant?.url) {
+            return 2;
+        }
+        if ((sku?.media?.gallery || []).length > 0) {
+            return 1;
+        }
+
+        return 0;
+    };
+
     const scoreSku = (sku) => {
         let matched = 0;
         selection.forEach((optionId, groupId) => {
-            if (sku.optionsByGroup?.[groupId] === optionId) {
+            if (optionForGroup(sku, groupId) === optionId) {
                 matched += 1;
             }
         });
+
         return { matched, total: selection.size, exact: matched === selection.size && selection.size > 0 };
     };
 
@@ -5588,19 +5610,31 @@ const initFamilyEcommercePreview = (root) => {
         }
 
         let exactSku = null;
+        let exactMediaRank = -1;
         let partialSku = null;
         let partialScore = -1;
+        let partialMediaRank = -1;
 
         data.skus.forEach((sku) => {
             const { matched, exact } = scoreSku(sku);
-            if (matched === 0) return;
-            if (exact) {
-                exactSku = sku;
+            if (matched === 0) {
                 return;
             }
-            if (matched > partialScore) {
+
+            const mediaRank = skuMediaRank(sku);
+            if (exact) {
+                if (!exactSku || mediaRank > exactMediaRank) {
+                    exactSku = sku;
+                    exactMediaRank = mediaRank;
+                }
+
+                return;
+            }
+
+            if (matched > partialScore || (matched === partialScore && mediaRank > partialMediaRank)) {
                 partialSku = sku;
                 partialScore = matched;
+                partialMediaRank = mediaRank;
             }
         });
 
@@ -5610,6 +5644,7 @@ const initFamilyEcommercePreview = (root) => {
         if (partialSku) {
             return { sku: partialSku, partial: true };
         }
+
         return { sku: null, partial: false };
     };
 
@@ -5816,12 +5851,18 @@ const initFamilyEcommercePreview = (root) => {
 
     const refreshPreview = () => {
         syncActiveControls();
-        if (!selectionComplete()) {
+        if (selection.size === 0) {
             applySku({ sku: null, partial: false });
             return;
         }
+
         const { sku, partial } = findBestSku();
-        applySku({ sku, partial });
+        if (!sku) {
+            applySku({ sku: null, partial: false });
+            return;
+        }
+
+        applySku({ sku, partial: partial || !selectionComplete() });
     };
 
     root.addEventListener('rfm-ecom-preview-naming-sync', (event) => {
@@ -5853,10 +5894,7 @@ const initFamilyEcommercePreview = (root) => {
         refreshPreview();
     };
 
-    const openPreview = () => {
-        overlay.hidden = false;
-        overlay.removeAttribute('aria-hidden');
-        document.body.classList.add('rfm-ecom-preview-open');
+    const bootstrapPreviewSelection = () => {
         selection.clear();
 
         swatchButtons.forEach((btn) => btn.classList.remove('is-active'));
@@ -5879,6 +5917,13 @@ const initFamilyEcommercePreview = (root) => {
         });
 
         refreshPreview();
+    };
+
+    const openPreview = () => {
+        overlay.hidden = false;
+        overlay.removeAttribute('aria-hidden');
+        document.body.classList.add('rfm-ecom-preview-open');
+        bootstrapPreviewSelection();
     };
 
     const closePreview = () => {
@@ -5938,6 +5983,11 @@ const initFamilyEcommercePreview = (root) => {
             updateGalleryCaption();
         }
     });
+
+    // Public /shop/{family} page: overlay is always visible — bootstrap selection on load.
+    if (overlay.classList.contains('as-page')) {
+        bootstrapPreviewSelection();
+    }
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
