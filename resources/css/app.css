@@ -9973,6 +9973,24 @@
         overflow-wrap: anywhere;
     }
 
+    .rfm-ecom-preview-toolbar-actions {
+        @apply flex shrink-0 items-center gap-2;
+    }
+
+    .rfm-ecom-preview-family-btn {
+        @apply inline-flex min-h-10 items-center justify-center rounded-full border px-3.5 text-xs font-bold whitespace-nowrap;
+        border-color: var(--color-accent);
+        background: var(--color-accent);
+        color: #fffdf8;
+    }
+
+    .rfm-ecom-preview-family-btn:hover,
+    .rfm-ecom-preview-family-btn:focus-visible {
+        background: #175b50;
+        border-color: #175b50;
+        outline: none;
+    }
+
     .rfm-ecom-preview-close {
         @apply flex h-10 w-10 shrink-0 items-center justify-center rounded-full border text-2xl leading-none cursor-pointer;
         border-color: #e5dbc9;

@@ -13,9 +13,17 @@
                 <strong id="rfm-ecom-preview-toolbar-title">{{ $ecomPreviewData['title'] }}</strong>
             </div>
             @if ($asPage)
-                <a href="{{ route('shop.index') }}" class="rfm-ecom-preview-close" aria-label="Back to shop">
-                    <span aria-hidden="true">←</span>
-                </a>
+                <div class="rfm-ecom-preview-toolbar-actions">
+                    @if (! empty($ecomPreviewData['familyManageUrl']))
+                        <a href="{{ $ecomPreviewData['familyManageUrl'] }}"
+                           class="rfm-ecom-preview-family-btn">
+                            Open family page
+                        </a>
+                    @endif
+                    <a href="{{ route('shop.index') }}" class="rfm-ecom-preview-close" aria-label="Back to shop">
+                        <span aria-hidden="true">←</span>
+                    </a>
+                </div>
             @else
                 <button type="button" class="rfm-ecom-preview-close" data-rfm-ecom-preview-close aria-label="Close preview">
                     <span aria-hidden="true">×</span>

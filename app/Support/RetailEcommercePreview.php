@@ -134,6 +134,8 @@ final class RetailEcommercePreview
         }
 
         return [
+            'familyId' => (int) $family->id,
+            'familyManageUrl' => route('retail-products.families.show', $family),
             'title' => $title,
             'familyTitle' => $family->display_family_name,
             'titlePlaceholder' => 'Choose options to preview the ecommerce product title',
