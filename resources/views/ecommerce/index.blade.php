@@ -3,10 +3,22 @@
 @section('title', 'Shop')
 
 @section('content')
-    @php($shopListQuery = array_filter(['line' => $activeLine ?? null]))
+    @php
+        $activeLine = $activeLine ?? null;
+        $activeLineId = $activeLineId ?? null;
+        $shopListQuery = array_filter([
+            'line_id' => $activeLineId,
+            'line' => $activeLineId ? null : $activeLine,
+        ]);
+    @endphp
     <div class="store-grid-wrap">
         <div class="store-grid-head">
-            <h1 class="store-h1">Shop@if (! empty($activeLine)) — {{ $activeLine }}@endif</h1>
+            <h1 class="store-h1">
+                Shop
+                @if (! empty($activeLine))
+                    <span class="store-h1-context"> — {{ $activeLine }}</span>
+                @endif
+            </h1>
             <p class="store-sub">{{ $cards->count() }} {{ $cards->count() === 1 ? 'product' : 'products' }}</p>
         </div>
 

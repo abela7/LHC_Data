@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use App\Models\BrandCatalogueLine;
 use App\Models\Product;
 use App\Models\ProductFamily;
 use App\Support\RetailEcommercePreview;
@@ -37,14 +38,20 @@ class EcommerceController extends Controller
         // A product has a real retail price.
         $pricedRelation = fn ($p) => $p->whereNotNull('retail_price');
 
+        $lineId = (int) $request->query('line_id', 0);
         $line = trim((string) $request->query('line', ''));
 
         $query = ProductFamily::query()
-            ->with(['products.media', 'products.price', 'media', 'ecommerceProfile'])
+            ->with(['products.media', 'products.price', 'media', 'ecommerceProfile', 'catalogueLine'])
             ->orderByDesc('id');
 
-        if ($line !== '') {
-            $query->where('line_name', $line);
+        if ($lineId > 0) {
+            $query->where('brand_catalogue_line_id', $lineId);
+        } elseif ($line !== '') {
+            $query->where(function ($builder) use ($line): void {
+                $builder->where('line_name', $line)
+                    ->orWhereHas('catalogueLine', fn ($lineQuery) => $lineQuery->where('name', $line));
+            });
         }
 
         switch ($filter) {
@@ -103,11 +110,21 @@ class EcommerceController extends Controller
             ];
         })->filter()->values();
 
+        $activeLineLabel = null;
+        if ($lineId > 0) {
+            $activeLineLabel = $families->first()?->catalogueLine?->name
+                ?: $families->first()?->line_name
+                ?: BrandCatalogueLine::query()->whereKey($lineId)->value('name');
+        } elseif ($line !== '') {
+            $activeLineLabel = $line;
+        }
+
         return view('ecommerce.index', [
             'cards' => $cards,
             'filters' => self::FILTERS,
             'activeFilter' => $filter,
-            'activeLine' => $line !== '' ? $line : null,
+            'activeLine' => $activeLineLabel,
+            'activeLineId' => $lineId > 0 ? $lineId : null,
         ]);
     }
 

@@ -17,11 +17,42 @@ use Illuminate\Support\Str;
 final class RetailEcommercePreview
 {
     /**
+     * @return array{line: string, lineUrl: ?string, lineShopUrl: ?string, lineCatalogueUrl: ?string, lineId: ?int}
+     */
+    public static function lineBreadcrumb(ProductFamily $family): array
+    {
+        $family->loadMissing(['catalogueLine']);
+
+        $lineLabel = $family->catalogueLine?->name
+            ?: ($family->line_name ?: ($family->product_type_name ?: $family->root_catalogue_name));
+        $lineCatalogueUrl = null;
+        if ($family->brand_catalogue_id && $family->brand_catalogue_brand_id && $family->catalogueLine) {
+            $lineCatalogueUrl = route('brand-catalogue.view.line', [
+                $family->brand_catalogue_id,
+                $family->brand_catalogue_brand_id,
+                $family->catalogueLine,
+            ]);
+        }
+        $lineShopUrl = $family->brand_catalogue_line_id
+            ? route('shop.index', ['line_id' => (int) $family->brand_catalogue_line_id])
+            : (filled($family->line_name) ? route('shop.index', ['line' => $family->line_name]) : null);
+
+        return [
+            'line' => (string) $lineLabel,
+            'lineUrl' => $lineShopUrl ?: $lineCatalogueUrl,
+            'lineShopUrl' => $lineShopUrl,
+            'lineCatalogueUrl' => $lineCatalogueUrl,
+            'lineId' => $family->brand_catalogue_line_id ? (int) $family->brand_catalogue_line_id : null,
+        ];
+    }
+
+    /**
      * @return array<string, mixed>
      */
     public static function forFamily(ProductFamily $family): array
     {
         $family->loadMissing([
+            'catalogueLine',
             'ecommerceProfile',
             'media',
             'variantGroups.options',
@@ -133,18 +164,20 @@ final class RetailEcommercePreview
             }
         }
 
+        $lineBreadcrumb = self::lineBreadcrumb($family);
+
         return [
             'familyId' => (int) $family->id,
             'familyManageUrl' => route('retail-products.families.show', $family),
             'shopProductUrl' => route('shop.show', $family),
-            'lineShopUrl' => filled($family->line_name)
-                ? route('shop.index', ['line' => $family->line_name])
-                : null,
+            'lineUrl' => $lineBreadcrumb['lineUrl'],
+            'lineShopUrl' => $lineBreadcrumb['lineShopUrl'],
+            'lineId' => $lineBreadcrumb['lineId'],
             'title' => $title,
             'familyTitle' => $family->display_family_name,
             'titlePlaceholder' => 'Choose options to preview the ecommerce product title',
             'brand' => $family->brand_name,
-            'line' => $family->line_name,
+            'line' => $lineBreadcrumb['line'],
             'category' => $family->product_type_name ?: $family->root_catalogue_name,
             'shortDescription' => $short,
             'longDescription' => $long,

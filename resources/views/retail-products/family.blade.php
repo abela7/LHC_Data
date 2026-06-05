@@ -5,6 +5,7 @@
 @section('heading', $family->display_family_name)
 
 @php
+    use App\Support\RetailEcommercePreview;
     use App\Support\VariantNaturalSort;
     use Illuminate\Support\Str;
 
@@ -123,18 +124,21 @@
         }
     }
 
+    $ecomLineBreadcrumb = RetailEcommercePreview::lineBreadcrumb($family);
+
     $ecomPreviewData = [
         'familyId' => (int) $family->id,
         'familyManageUrl' => route('retail-products.families.show', $family),
         'shopProductUrl' => route('shop.show', $family),
-        'lineShopUrl' => filled($family->line_name)
-            ? route('shop.index', ['line' => $family->line_name])
-            : null,
+        'lineUrl' => $ecomLineBreadcrumb['lineUrl'],
+        'lineShopUrl' => $ecomLineBreadcrumb['lineShopUrl'],
+        'lineCatalogueUrl' => $ecomLineBreadcrumb['lineCatalogueUrl'],
+        'lineId' => $ecomLineBreadcrumb['lineId'],
         'title' => $ecomPreviewTitle,
         'familyTitle' => $family->display_family_name,
         'titlePlaceholder' => 'Choose options to preview the ecommerce product title',
         'brand' => $family->brand_name,
-        'line' => $family->line_name,
+        'line' => $ecomLineBreadcrumb['line'],
         'category' => $family->product_type_name ?: $family->root_catalogue_name,
         'shortDescription' => $ecomPreviewShort,
         'longDescription' => $ecomPreviewLong,

@@ -33,6 +33,11 @@ class ProductFamily extends Model
         return $this->belongsTo(BrandCatalogueStyle::class, 'brand_catalogue_style_id');
     }
 
+    public function catalogueLine(): BelongsTo
+    {
+        return $this->belongsTo(BrandCatalogueLine::class, 'brand_catalogue_line_id');
+    }
+
     public function products(): HasMany
     {
         return $this->hasMany(Product::class)->orderBy('sort_order')->orderBy('name');

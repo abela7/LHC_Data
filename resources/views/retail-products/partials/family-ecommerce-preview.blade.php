@@ -40,8 +40,8 @@
                 <nav class="rfm-ecom-preview-breadcrumb" aria-label="Breadcrumb">
                     <a href="{{ route('shop.index') }}">Home</a>
                     <span class="rfm-ecom-preview-breadcrumb-sep" aria-hidden="true">›</span>
-                    @if (! empty($ecomPreviewData['lineShopUrl']) && ! empty($ecomPreviewData['line']))
-                        <a href="{{ $ecomPreviewData['lineShopUrl'] }}"
+                    @if (! empty($ecomPreviewData['lineUrl']) && ! empty($ecomPreviewData['line']))
+                        <a href="{{ $ecomPreviewData['lineUrl'] }}"
                            data-rfm-ecom-preview-breadcrumb-line>{{ $ecomPreviewData['line'] }}</a>
                     @else
                         <span data-rfm-ecom-preview-breadcrumb-line>{{ $ecomPreviewData['line'] ?: ($ecomPreviewData['category'] ?: 'Shop') }}</span>
