@@ -10076,8 +10076,44 @@
         @apply mb-4 flex items-baseline gap-3;
     }
 
+    .store-filters-accordion {
+        @apply mb-5 rounded-xl border;
+        border-color: #e5dbc9;
+        background: #fffdf8;
+    }
+
+    .store-filters-summary {
+        @apply flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5 text-sm font-bold;
+        color: #4a4438;
+    }
+
+    .store-filters-summary::-webkit-details-marker {
+        display: none;
+    }
+
+    .store-filters-summary::after {
+        content: '▾';
+        @apply text-xs font-bold;
+        color: #9a8f78;
+        transition: transform 150ms ease;
+    }
+
+    .store-filters-accordion[open] .store-filters-summary::after {
+        transform: rotate(180deg);
+    }
+
+    .store-filters-summary-label {
+        @apply shrink-0;
+    }
+
+    .store-filters-active {
+        @apply min-w-0 truncate text-right text-xs font-semibold not-italic;
+        color: #1f6f54;
+    }
+
     .store-filters {
-        @apply mb-5 flex flex-wrap gap-2;
+        @apply flex flex-wrap gap-2 border-t px-3 pb-3 pt-2;
+        border-color: #efe8da;
     }
 
     .store-filter {

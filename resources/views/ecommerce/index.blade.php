@@ -9,12 +9,18 @@
             <p class="store-sub">{{ $cards->count() }} {{ $cards->count() === 1 ? 'product' : 'products' }}</p>
         </div>
 
-        <div class="store-filters" role="tablist" aria-label="Filter products">
-            @foreach ($filters as $key => $label)
-                <a href="{{ route('shop.index', $key === 'photo' ? [] : ['filter' => $key]) }}"
-                   class="store-filter {{ $activeFilter === $key ? 'is-active' : '' }}">{{ $label }}</a>
-            @endforeach
-        </div>
+        <details class="store-filters-accordion">
+            <summary class="store-filters-summary">
+                <span class="store-filters-summary-label">Filter products</span>
+                <em class="store-filters-active">{{ $filters[$activeFilter] }}</em>
+            </summary>
+            <div class="store-filters" role="tablist" aria-label="Filter products">
+                @foreach ($filters as $key => $label)
+                    <a href="{{ route('shop.index', $key === 'photo' ? [] : ['filter' => $key]) }}"
+                       class="store-filter {{ $activeFilter === $key ? 'is-active' : '' }}">{{ $label }}</a>
+                @endforeach
+            </div>
+        </details>
 
         @if ($cards->isEmpty())
             <p class="store-empty">No products match “{{ $filters[$activeFilter] }}”.</p>
