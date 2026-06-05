@@ -8,6 +8,7 @@ use App\Models\Product;
 use App\Models\ProductCategoryAssignment;
 use App\Models\ProductEcommerceProfile;
 use App\Models\ProductFamily;
+use App\Models\ProductMedia;
 use App\Models\ProductSource;
 use App\Models\ProductVariantGroup;
 use App\Models\ProductVariantOption;
@@ -72,7 +73,7 @@ class MergeLengthFamiliesCommand extends Command
         $families = ProductFamily::query()
             ->where('brand_catalogue_style_id', $styleId)
             ->withCount('products')
-            ->with(['variantGroups.options', 'products.variantValues'])
+            ->with(['variantGroups.options', 'products.variantValues', 'products.media', 'media'])
             ->orderByDesc('products_count')
             ->get();
 
@@ -192,8 +193,10 @@ class MergeLengthFamiliesCommand extends Command
                 default => 'UNRESOLVED',
             };
             $tag = $family->id === $target->id ? ' [TARGET]' : '';
+            $skuPhotos = $family->products->sum(fn (Product $product): int => $product->media->count());
+            $familyPhotos = $family->media->count();
             $this->line("FAM #{$family->id} scope=".var_export($family->catalogue_scope_key, true)
-                ." length={$lengthText} skus={$family->products_count}{$tag}");
+                ." length={$lengthText} skus={$family->products_count} photos={$skuPhotos}+{$familyPhotos}{$tag}");
 
             foreach ($family->variantGroups as $group) {
                 $note = $this->isLengthGroup($group) ? ' (folded into main Length)'
@@ -214,10 +217,14 @@ class MergeLengthFamiliesCommand extends Command
             }
         }
 
+        $totalPhotos = $families->sum(fn (ProductFamily $f): int =>
+            $f->products->sum(fn (Product $p): int => $p->media->count()) + $f->media->count());
+
         $this->newLine();
         $this->line('Length axis (MAIN) will hold every distinct SKU length above.');
         $this->line('Roles after merge: Length=Main, count/pack axis=Common, others (Colour)=Sub-main.');
         $this->line('Redundant Length/Pack groups on source families are folded/dropped — not duplicated.');
+        $this->line("Photos: all {$totalPhotos} (per-SKU + family) are MOVED to the kept family — none deleted.");
     }
 
     /**
@@ -279,7 +286,17 @@ class MergeLengthFamiliesCommand extends Command
                     ->update(['product_family_id' => $target->id]);
                 ProductEcommerceProfile::query()->where('product_id', $product->id)
                     ->update(['product_family_id' => $target->id]);
+                // Photos store the family id and would be cascade-deleted when the
+                // source family is removed — re-point them to the kept family.
+                ProductMedia::query()->where('product_id', $product->id)
+                    ->update(['product_family_id' => $target->id]);
             }
+
+            // Safety net: re-point ANY remaining media of this source family
+            // (moved-product photos + the family's own Main/variant/gallery images)
+            // to the target BEFORE deleting it, so nothing is cascade-deleted.
+            ProductMedia::query()->where('product_family_id', $family->id)
+                ->update(['product_family_id' => $target->id]);
 
             $family->delete();
         }
