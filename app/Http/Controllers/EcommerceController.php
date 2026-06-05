@@ -7,6 +7,7 @@ namespace App\Http\Controllers;
 use App\Models\Product;
 use App\Models\ProductFamily;
 use App\Support\RetailEcommercePreview;
+use Illuminate\Http\Request;
 use Illuminate\View\View;
 
 /**
@@ -16,17 +17,50 @@ use Illuminate\View\View;
  */
 class EcommerceController extends Controller
 {
-    public function index(): View
-    {
-        $families = ProductFamily::query()
-            ->where(function ($query): void {
-                $query->whereHas('products.media')->orWhereHas('media');
-            })
-            ->with(['products.media', 'products.price', 'media', 'ecommerceProfile'])
-            ->orderByDesc('id')
-            ->get();
+    /** @var array<string, string> filter key => label */
+    private const FILTERS = [
+        'photo' => 'Has photo',
+        'barcode' => 'Has barcode',
+        'barcode_price' => 'Barcode + price',
+        'barcode_photo_no_price' => 'Barcode + photo, no price',
+    ];
 
-        $cards = $families->map(function (ProductFamily $family): ?array {
+    public function index(Request $request): View
+    {
+        $filter = (string) $request->query('filter', 'photo');
+        if (! array_key_exists($filter, self::FILTERS)) {
+            $filter = 'photo';
+        }
+
+        // A product has a usable barcode.
+        $hasBarcode = fn ($q) => $q->whereNotNull('barcode')->where('barcode', '<>', '');
+        // A product has a real retail price.
+        $pricedRelation = fn ($p) => $p->whereNotNull('retail_price');
+
+        $query = ProductFamily::query()
+            ->with(['products.media', 'products.price', 'media', 'ecommerceProfile'])
+            ->orderByDesc('id');
+
+        switch ($filter) {
+            case 'barcode':
+                $query->whereHas('products', fn ($q) => $hasBarcode($q));
+                break;
+            case 'barcode_price':
+                $query->whereHas('products', fn ($q) => $hasBarcode($q)->whereHas('price', $pricedRelation));
+                break;
+            case 'barcode_photo_no_price':
+                $query->whereHas('products', fn ($q) => $hasBarcode($q)
+                    ->whereHas('media')
+                    ->whereDoesntHave('price', $pricedRelation));
+                break;
+            default: // photo
+                $query->where(fn ($q) => $q->whereHas('products.media')->orWhereHas('media'));
+        }
+
+        $families = $query->get();
+        $requirePhoto = $filter === 'photo';
+
+        $cards = $families->map(function (ProductFamily $family) use ($requirePhoto): ?array {
             $image = null;
             foreach ($family->products as $product) {
                 $media = $product->media->firstWhere('image_role', 'main')
@@ -41,8 +75,8 @@ class EcommerceController extends Controller
             if (! $image) {
                 $image = optional($family->media->first(fn ($m) => $m->displayUrl()))->displayUrl();
             }
-            if (! $image) {
-                return null; // no displayable photo — keep it out of the storefront
+            if (! $image && $requirePhoto) {
+                return null; // photo filter: skip families with no displayable photo
             }
 
             $prices = $family->products
@@ -63,7 +97,11 @@ class EcommerceController extends Controller
             ];
         })->filter()->values();
 
-        return view('ecommerce.index', ['cards' => $cards]);
+        return view('ecommerce.index', [
+            'cards' => $cards,
+            'filters' => self::FILTERS,
+            'activeFilter' => $filter,
+        ]);
     }
 
     public function show(ProductFamily $family): View

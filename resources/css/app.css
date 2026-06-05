@@ -10054,6 +10054,29 @@
         @apply mb-4 flex items-baseline gap-3;
     }
 
+    .store-filters {
+        @apply mb-5 flex flex-wrap gap-2;
+    }
+
+    .store-filter {
+        @apply inline-flex items-center rounded-full border px-3 py-2 text-xs font-bold no-underline;
+        border-color: #e2dac9;
+        background: #fff;
+        color: #6a5f4e;
+        min-height: 40px;
+    }
+
+    .store-filter.is-active {
+        border-color: #1f6f54;
+        background: #1f6f54;
+        color: #fff;
+    }
+
+    .store-card-noimg {
+        @apply text-xs font-bold uppercase tracking-wide;
+        color: #b8ad97;
+    }
+
     .store-h1 {
         @apply text-2xl font-black;
         color: #2a2620;

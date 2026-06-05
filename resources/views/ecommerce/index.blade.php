@@ -9,14 +9,25 @@
             <p class="store-sub">{{ $cards->count() }} {{ $cards->count() === 1 ? 'product' : 'products' }}</p>
         </div>
 
+        <div class="store-filters" role="tablist" aria-label="Filter products">
+            @foreach ($filters as $key => $label)
+                <a href="{{ route('shop.index', $key === 'photo' ? [] : ['filter' => $key]) }}"
+                   class="store-filter {{ $activeFilter === $key ? 'is-active' : '' }}">{{ $label }}</a>
+            @endforeach
+        </div>
+
         @if ($cards->isEmpty())
-            <p class="store-empty">No products with photos yet.</p>
+            <p class="store-empty">No products match “{{ $filters[$activeFilter] }}”.</p>
         @else
             <div class="store-grid">
                 @foreach ($cards as $card)
                     <a class="store-card" href="{{ route('shop.show', $card['family']) }}">
                         <div class="store-card-img">
-                            <img src="{{ $card['image'] }}" alt="{{ $card['title'] }}" loading="lazy">
+                            @if ($card['image'])
+                                <img src="{{ $card['image'] }}" alt="{{ $card['title'] }}" loading="lazy">
+                            @else
+                                <span class="store-card-noimg">No photo</span>
+                            @endif
                         </div>
                         <div class="store-card-body">
                             <span class="store-card-brand">{{ $card['brand'] }}</span>
