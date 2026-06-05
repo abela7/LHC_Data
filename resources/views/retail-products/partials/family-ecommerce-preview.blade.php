@@ -16,8 +16,12 @@
                 <div class="rfm-ecom-preview-toolbar-actions">
                     @if (! empty($ecomPreviewData['familyManageUrl']))
                         <a href="{{ $ecomPreviewData['familyManageUrl'] }}"
-                           class="rfm-ecom-preview-family-btn">
-                            Open family page
+                           class="rfm-ecom-preview-family-btn"
+                           aria-label="Open family page"
+                           title="Open family page">
+                            <svg class="rfm-ecom-preview-family-btn-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">
+                                <path fill="currentColor" d="M12 5C7 5 2.73 8.11 1 12.5 2.73 16.89 7 20 12 20s9.27-3.11 11-7.5C21.27 8.11 17 5 12 5zm0 11.5A4 4 0 1 1 12 8.5a4 4 0 0 1 0 8zm0-6.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5z"/>
+                            </svg>
                         </a>
                     @endif
                     <a href="{{ route('shop.index') }}" class="rfm-ecom-preview-close" aria-label="Back to shop">

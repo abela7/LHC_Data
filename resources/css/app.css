@@ -9978,10 +9978,14 @@
     }
 
     .rfm-ecom-preview-family-btn {
-        @apply inline-flex min-h-10 items-center justify-center rounded-full border px-3.5 text-xs font-bold whitespace-nowrap;
+        @apply flex h-10 w-10 shrink-0 items-center justify-center rounded-full border;
         border-color: var(--color-accent);
         background: var(--color-accent);
         color: #fffdf8;
+    }
+
+    .rfm-ecom-preview-family-btn-icon {
+        display: block;
     }
 
     .rfm-ecom-preview-family-btn:hover,
