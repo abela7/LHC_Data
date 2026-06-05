@@ -27,9 +27,9 @@ class EcommerceController extends Controller
 
     public function index(Request $request): View
     {
-        $filter = (string) $request->query('filter', 'photo');
+        $filter = (string) $request->query('filter', 'barcode');
         if (! array_key_exists($filter, self::FILTERS)) {
-            $filter = 'photo';
+            $filter = 'barcode';
         }
 
         // A product has a usable barcode.

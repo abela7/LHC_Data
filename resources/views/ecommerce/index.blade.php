@@ -16,7 +16,7 @@
             </summary>
             <div class="store-filters" role="tablist" aria-label="Filter products">
                 @foreach ($filters as $key => $label)
-                    <a href="{{ route('shop.index', $key === 'photo' ? [] : ['filter' => $key]) }}"
+                    <a href="{{ route('shop.index', $key === 'barcode' ? [] : ['filter' => $key]) }}"
                        class="store-filter {{ $activeFilter === $key ? 'is-active' : '' }}">{{ $label }}</a>
                 @endforeach
             </div>
