@@ -5548,6 +5548,18 @@ const initFamilyEcommercePreview = (root) => {
     const selection = new Map();
     let gallerySlides = [];
     let activeSlideIndex = 0;
+    let galleryLightboxOpen = false;
+
+    const galleryLightbox = overlay.querySelector('[data-rfm-ecom-preview-lightbox]');
+    const galleryLightboxImg = galleryLightbox?.querySelector('[data-rfm-ecom-preview-lightbox-img]');
+    const galleryLightboxCaption = galleryLightbox?.querySelector('[data-rfm-ecom-preview-lightbox-caption]');
+    const galleryLightboxCounter = galleryLightbox?.querySelector('[data-rfm-ecom-preview-lightbox-counter]');
+    const galleryLightboxPrev = galleryLightbox?.querySelector('[data-rfm-ecom-preview-lightbox-prev]');
+    const galleryLightboxNext = galleryLightbox?.querySelector('[data-rfm-ecom-preview-lightbox-next]');
+    const galleryLightboxThumbs = galleryLightbox?.querySelector('[data-rfm-ecom-preview-lightbox-thumbs]');
+    const galleryLightboxCloseButtons = galleryLightbox
+        ? Array.from(galleryLightbox.querySelectorAll('[data-rfm-ecom-preview-lightbox-close]'))
+        : [];
 
     const formatMoney = (value) => {
         if (value === null || value === undefined || Number.isNaN(Number(value))) {
@@ -5674,6 +5686,117 @@ const initFamilyEcommercePreview = (root) => {
     const zoomMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
     const zoomEnabled = () => zoomHoverQuery.matches && !zoomMotionQuery.matches;
 
+    const slideCaption = (slide, index) => {
+        if (!slide) {
+            return '';
+        }
+        const pos = `${index + 1} / ${gallerySlides.length}`;
+        const roleLabel = slide.role === 'main' ? 'Main product photo' : (slide.label || 'Gallery detail');
+        return `${pos} · ${roleLabel}`;
+    };
+
+    const syncMainGalleryFromLightbox = (index) => {
+        if (!gallerySlides[index]) {
+            return;
+        }
+        activeSlideIndex = index;
+        setMainImage(gallerySlides[index]);
+        renderGalleryThumbs();
+        updateGalleryCaption();
+    };
+
+    const renderLightboxThumbs = () => {
+        if (!galleryLightboxThumbs) {
+            return;
+        }
+        galleryLightboxThumbs.innerHTML = '';
+        const multi = gallerySlides.length > 1;
+        galleryLightboxThumbs.hidden = !multi;
+
+        gallerySlides.forEach((slide, index) => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = `rfm-ecom-preview-lightbox-thumb ${index === activeSlideIndex ? 'is-active' : ''}`;
+            btn.dataset.rfmEcomPreviewLightboxThumb = '';
+            btn.setAttribute('role', 'listitem');
+            btn.setAttribute('aria-label', slideCaption(slide, index));
+
+            const thumbImg = document.createElement('img');
+            thumbImg.src = slide.url;
+            thumbImg.alt = '';
+            thumbImg.loading = 'lazy';
+            thumbImg.draggable = false;
+
+            btn.append(thumbImg);
+            btn.addEventListener('click', () => {
+                setLightboxSlide(index);
+            });
+            galleryLightboxThumbs.append(btn);
+        });
+    };
+
+    const setLightboxSlide = (index, { syncMain = true } = {}) => {
+        if (!galleryLightbox || !gallerySlides.length) {
+            return;
+        }
+        const normalized = (index + gallerySlides.length) % gallerySlides.length;
+        const slide = gallerySlides[normalized];
+        if (!slide?.url) {
+            return;
+        }
+
+        activeSlideIndex = normalized;
+        if (galleryLightboxImg) {
+            galleryLightboxImg.src = slide.url;
+            galleryLightboxImg.alt = slide.alt || '';
+        }
+        if (galleryLightboxCaption) {
+            galleryLightboxCaption.textContent = slideCaption(slide, normalized);
+        }
+        if (galleryLightboxCounter) {
+            const multi = gallerySlides.length > 1;
+            galleryLightboxCounter.hidden = !multi;
+            galleryLightboxCounter.textContent = multi ? `${normalized + 1} / ${gallerySlides.length}` : '';
+        }
+        if (galleryLightboxPrev) {
+            galleryLightboxPrev.hidden = gallerySlides.length <= 1;
+        }
+        if (galleryLightboxNext) {
+            galleryLightboxNext.hidden = gallerySlides.length <= 1;
+        }
+
+        galleryLightboxThumbs?.querySelectorAll('[data-rfm-ecom-preview-lightbox-thumb]').forEach((btn, btnIndex) => {
+            btn.classList.toggle('is-active', btnIndex === normalized);
+        });
+
+        if (syncMain) {
+            syncMainGalleryFromLightbox(normalized);
+        }
+    };
+
+    const closeGalleryLightbox = () => {
+        if (!galleryLightbox || galleryLightbox.hidden) {
+            return;
+        }
+        galleryLightbox.hidden = true;
+        galleryLightbox.setAttribute('aria-hidden', 'true');
+        galleryLightboxOpen = false;
+        document.body.classList.remove('rfm-ecom-gallery-open');
+    };
+
+    const openGalleryLightbox = () => {
+        if (!galleryLightbox || !gallerySlides.length || !gallerySlides[activeSlideIndex]?.url) {
+            return;
+        }
+        setLightboxSlide(activeSlideIndex, { syncMain: false });
+        renderLightboxThumbs();
+        galleryLightbox.hidden = false;
+        galleryLightbox.removeAttribute('aria-hidden');
+        galleryLightboxOpen = true;
+        document.body.classList.add('rfm-ecom-gallery-open');
+        galleryLightboxCloseButtons[0]?.focus();
+    };
+
     const bindMainImageZoom = (zoomPane, img) => {
         if (!mainWrap || !zoomEnabled()) {
             mainWrap?.classList.remove('is-zoomable', 'is-zooming');
@@ -5707,7 +5830,7 @@ const initFamilyEcommercePreview = (root) => {
     const setMainImage = (slide) => {
         if (!mainWrap) return;
         mainWrap.innerHTML = '';
-        mainWrap.classList.remove('is-zoomable', 'is-zooming');
+        mainWrap.classList.remove('is-zoomable', 'is-zooming', 'is-gallery-openable');
         if (!slide?.url) {
             const empty = document.createElement('div');
             empty.className = 'rfm-ecom-preview-img-empty';
@@ -5716,28 +5839,32 @@ const initFamilyEcommercePreview = (root) => {
             return;
         }
 
-        const zoomPane = document.createElement('div');
+        const zoomPane = document.createElement('button');
+        zoomPane.type = 'button';
         zoomPane.className = 'rfm-ecom-preview-zoom';
         zoomPane.dataset.rfmEcomPreviewZoom = '';
+        zoomPane.setAttribute('aria-label', 'Open product photo gallery');
 
         const img = document.createElement('img');
         img.src = slide.url;
         img.alt = slide.alt || '';
         img.dataset.rfmEcomPreviewMainImg = '';
+        img.draggable = false;
         img.style.setProperty('--zoom-scale', String(zoomScale));
 
-        if (zoomEnabled()) {
-            const hint = document.createElement('span');
-            hint.className = 'rfm-ecom-preview-zoom-hint';
-            hint.setAttribute('aria-hidden', 'true');
-            hint.textContent = 'Hover to zoom';
-            zoomPane.append(img, hint);
-        } else {
-            zoomPane.append(img);
-        }
+        const hint = document.createElement('span');
+        hint.className = 'rfm-ecom-preview-zoom-hint';
+        hint.setAttribute('aria-hidden', 'true');
+        hint.textContent = zoomEnabled() ? 'Hover to zoom · Click for gallery' : 'Tap for gallery';
 
+        zoomPane.append(img, hint);
+        mainWrap.classList.add('is-gallery-openable');
         mainWrap.append(zoomPane);
         bindMainImageZoom(zoomPane, img);
+
+        zoomPane.addEventListener('click', () => {
+            openGalleryLightbox();
+        });
     };
 
     const renderGalleryThumbs = () => {
@@ -5790,6 +5917,8 @@ const initFamilyEcommercePreview = (root) => {
     };
 
     const applySku = ({ sku, partial }) => {
+        closeGalleryLightbox();
+
         if (!sku) {
             setPreviewTitleText(data.title || titlePlaceholder);
             if (priceEl) priceEl.textContent = formatPriceRange();
@@ -5962,8 +6091,36 @@ const initFamilyEcommercePreview = (root) => {
         });
     });
 
+    galleryLightboxCloseButtons.forEach((btn) => {
+        btn.addEventListener('click', closeGalleryLightbox);
+    });
+    galleryLightboxPrev?.addEventListener('click', () => {
+        setLightboxSlide(activeSlideIndex - 1);
+    });
+    galleryLightboxNext?.addEventListener('click', () => {
+        setLightboxSlide(activeSlideIndex + 1);
+    });
+
     document.addEventListener('keydown', (event) => {
-        if (overlay.hidden) return;
+        if (galleryLightboxOpen && galleryLightbox && !galleryLightbox.hidden) {
+            if (event.key === 'Escape') {
+                event.preventDefault();
+                closeGalleryLightbox();
+                return;
+            }
+            if (gallerySlides.length > 1 && event.key === 'ArrowRight') {
+                event.preventDefault();
+                setLightboxSlide(activeSlideIndex + 1);
+                return;
+            }
+            if (gallerySlides.length > 1 && event.key === 'ArrowLeft') {
+                event.preventDefault();
+                setLightboxSlide(activeSlideIndex - 1);
+                return;
+            }
+        }
+
+        if (overlay.hidden || overlay.classList.contains('as-page')) return;
         if (event.key === 'Escape') {
             event.preventDefault();
             closePreview();

@@ -63,8 +63,57 @@
                         </div>
                         <p class="rfm-ecom-preview-gallery-caption" data-rfm-ecom-preview-gallery-caption hidden></p>
                         <div class="rfm-ecom-preview-thumbs" data-rfm-ecom-preview-thumbs role="list"></div>
-                        <p class="rfm-ecom-preview-gallery-hint">Main photo and gallery for the selected sellable SKU. On desktop, hover the large image to zoom. Colour swatches use variant photos only.</p>
+                        <p class="rfm-ecom-preview-gallery-hint">Main photo and gallery for the selected sellable SKU. On desktop, hover the large image to zoom; click it to open the full gallery. Colour swatches use variant photos only.</p>
                     </section>
+
+                    <div class="rfm-ecom-preview-lightbox"
+                         data-rfm-ecom-preview-lightbox
+                         hidden
+                         aria-hidden="true"
+                         role="dialog"
+                         aria-modal="true"
+                         aria-label="Product photo gallery">
+                        <button type="button"
+                                class="rfm-ecom-preview-lightbox-backdrop"
+                                data-rfm-ecom-preview-lightbox-close
+                                aria-label="Close gallery"></button>
+                        <div class="rfm-ecom-preview-lightbox-panel">
+                            <header class="rfm-ecom-preview-lightbox-head">
+                                <p class="rfm-ecom-preview-lightbox-caption" data-rfm-ecom-preview-lightbox-caption></p>
+                                <button type="button"
+                                        class="rfm-ecom-preview-lightbox-close"
+                                        data-rfm-ecom-preview-lightbox-close
+                                        aria-label="Close gallery">
+                                    <span aria-hidden="true">×</span>
+                                </button>
+                            </header>
+                            <div class="rfm-ecom-preview-lightbox-stage">
+                                <button type="button"
+                                        class="rfm-ecom-preview-lightbox-nav rfm-ecom-preview-lightbox-prev"
+                                        data-rfm-ecom-preview-lightbox-prev
+                                        aria-label="Previous photo"
+                                        hidden>
+                                    <span aria-hidden="true">‹</span>
+                                </button>
+                                <img src=""
+                                     alt=""
+                                     class="rfm-ecom-preview-lightbox-img"
+                                     data-rfm-ecom-preview-lightbox-img>
+                                <button type="button"
+                                        class="rfm-ecom-preview-lightbox-nav rfm-ecom-preview-lightbox-next"
+                                        data-rfm-ecom-preview-lightbox-next
+                                        aria-label="Next photo"
+                                        hidden>
+                                    <span aria-hidden="true">›</span>
+                                </button>
+                            </div>
+                            <p class="rfm-ecom-preview-lightbox-counter" data-rfm-ecom-preview-lightbox-counter hidden></p>
+                            <div class="rfm-ecom-preview-lightbox-thumbs"
+                                 data-rfm-ecom-preview-lightbox-thumbs
+                                 role="list"
+                                 hidden></div>
+                        </div>
+                    </div>
 
                     <section class="rfm-ecom-preview-buy" aria-label="Purchase information">
                         <p class="rfm-ecom-preview-brand" data-rfm-ecom-preview-brand>{{ $ecomPreviewData['brand'] }}</p>
