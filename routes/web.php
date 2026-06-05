@@ -56,6 +56,10 @@ Route::post('/access/admin', [AccessController::class, 'enterAdmin'])->name('acc
 Route::post('/access/switch', [AccessController::class, 'switch'])->name('access.switch');
 Route::get('/data-entry', [AccessController::class, 'dataEntryDashboard'])->name('data-entry.dashboard');
 
+// Public demo storefront (no login / mode gate — see EnsureAccessMode exemption).
+Route::get('/shop', [\App\Http\Controllers\EcommerceController::class, 'index'])->name('shop.index');
+Route::get('/shop/{family}', [\App\Http\Controllers\EcommerceController::class, 'show'])->name('shop.show');
+
 Route::get('/', [ObservedProductController::class, 'index'])->name('dashboard');
 Route::get('/invoice-generator', [InvoiceGeneratorController::class, 'create'])->name('invoice-generator.create');
 Route::post('/invoice-generator/pdf', [InvoiceGeneratorController::class, 'pdf'])->name('invoice-generator.pdf');

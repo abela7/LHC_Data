@@ -9987,5 +9987,9 @@ initDeliverooPriceModal();
 initStyleWorkspaceAjaxV2();
 initRetailMediaManagers();
 initRetailFamilyManager();
+// Public /shop product page: reuse the exact store-preview logic (swatches, gallery, price).
+if (document.querySelector('[data-rfm-ecom-store]')) {
+    initFamilyEcommercePreview(document);
+}
 initInventoryStructureAjax();
 initHairIntakeWizard();

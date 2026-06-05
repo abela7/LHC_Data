@@ -9995,6 +9995,132 @@
         @apply mx-auto max-w-[960px] px-4 py-5 md:px-8 md:py-8;
     }
 
+    /* ── Store preview rendered as a full page (public /shop product page) ── */
+    .rfm-ecom-preview-overlay.as-page {
+        position: static;
+        z-index: auto;
+        display: block;
+        padding: 0;
+    }
+
+    .rfm-ecom-preview-overlay.as-page .rfm-ecom-preview-dialog {
+        height: auto;
+        max-height: none;
+        margin: 0 auto;
+        max-width: 1100px;
+        overflow: visible;
+        background: transparent;
+        border: 0;
+        box-shadow: none;
+        border-radius: 0;
+    }
+
+    .rfm-ecom-preview-overlay.as-page .rfm-ecom-preview-scroll {
+        overflow: visible;
+    }
+
+    /* ── Public demo storefront (layouts.storefront, /shop) ── */
+    .store-body {
+        @apply min-h-screen;
+        background: #f7f5f0;
+    }
+
+    .store-topbar {
+        @apply flex items-center justify-between gap-3 px-4 py-3 md:px-8;
+        background: #fff;
+        border-bottom: 1px solid #e5dbc9;
+    }
+
+    .store-brand {
+        @apply text-lg font-black no-underline;
+        color: #1f6f54;
+    }
+
+    .store-topbar-note {
+        @apply text-xs font-bold uppercase tracking-wide;
+        color: #9a8f78;
+    }
+
+    .store-main {
+        @apply mx-auto w-full;
+        max-width: 1200px;
+    }
+
+    .store-grid-wrap {
+        @apply px-4 py-6 md:px-8 md:py-8;
+    }
+
+    .store-grid-head {
+        @apply mb-4 flex items-baseline gap-3;
+    }
+
+    .store-h1 {
+        @apply text-2xl font-black;
+        color: #2a2620;
+    }
+
+    .store-sub {
+        @apply text-sm;
+        color: #9a8f78;
+    }
+
+    .store-empty {
+        @apply rounded-xl border bg-white p-6 text-center;
+        border-color: #e5dbc9;
+        color: #7a6f5e;
+    }
+
+    .store-grid {
+        @apply grid gap-4;
+        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    }
+
+    @media (min-width: 768px) {
+        .store-grid {
+            grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+        }
+    }
+
+    .store-card {
+        @apply flex flex-col overflow-hidden rounded-[14px] border bg-white no-underline;
+        border-color: #e8e1d3;
+        transition: box-shadow 0.15s ease, transform 0.08s ease;
+    }
+
+    .store-card:hover {
+        box-shadow: 0 10px 28px rgba(31, 36, 33, 0.10);
+        transform: translateY(-2px);
+    }
+
+    .store-card-img {
+        @apply flex items-center justify-center overflow-hidden;
+        aspect-ratio: 1 / 1;
+        background: #faf8f3;
+    }
+
+    .store-card-img img {
+        @apply h-full w-full object-cover;
+    }
+
+    .store-card-body {
+        @apply flex flex-col gap-1 p-3;
+    }
+
+    .store-card-brand {
+        @apply text-[11px] font-bold uppercase tracking-wide;
+        color: #9a8f78;
+    }
+
+    .store-card-title {
+        @apply text-sm font-bold leading-snug;
+        color: #2a2620;
+    }
+
+    .store-card-price {
+        @apply mt-1 text-sm font-black;
+        color: #1f6f54;
+    }
+
     .rfm-ecom-preview-breadcrumb {
         @apply mb-4 flex flex-wrap items-center gap-1.5 text-xs;
         color: #8a8478;

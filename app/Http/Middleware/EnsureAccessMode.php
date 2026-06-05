@@ -16,7 +16,7 @@ class EnsureAccessMode
      */
     public function handle(Request $request, Closure $next): Response
     {
-        if ($request->routeIs('access.*')) {
+        if ($request->routeIs('access.*', 'shop.*')) {
             return $next($request);
         }
 

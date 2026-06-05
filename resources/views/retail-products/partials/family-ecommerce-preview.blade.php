@@ -1,18 +1,26 @@
-{{-- Full-screen responsive shop preview (opened from family hero eye icon) --}}
-<div class="rfm-ecom-preview-overlay"
+@php($asPage = $asPage ?? false)
+{{-- Responsive shop preview. Modal (family hero eye icon) or full page (public /shop). --}}
+<div class="rfm-ecom-preview-overlay {{ $asPage ? 'as-page' : '' }}"
      data-rfm-ecom-preview
-     hidden
-     aria-hidden="true">
-    <div class="rfm-ecom-preview-backdrop" data-rfm-ecom-preview-close></div>
+     @unless($asPage) hidden aria-hidden="true" @endunless>
+    @unless($asPage)
+        <div class="rfm-ecom-preview-backdrop" data-rfm-ecom-preview-close></div>
+    @endunless
     <div class="rfm-ecom-preview-dialog" role="dialog" aria-modal="true" aria-labelledby="rfm-ecom-preview-title">
         <header class="rfm-ecom-preview-toolbar">
             <div class="rfm-ecom-preview-toolbar-copy">
-                <span class="rfm-ecom-preview-toolbar-eyebrow">Store preview</span>
+                <span class="rfm-ecom-preview-toolbar-eyebrow">{{ $asPage ? 'Shop' : 'Store preview' }}</span>
                 <strong id="rfm-ecom-preview-toolbar-title">{{ $ecomPreviewData['title'] }}</strong>
             </div>
-            <button type="button" class="rfm-ecom-preview-close" data-rfm-ecom-preview-close aria-label="Close preview">
-                <span aria-hidden="true">×</span>
-            </button>
+            @if ($asPage)
+                <a href="{{ route('shop.index') }}" class="rfm-ecom-preview-close" aria-label="Back to shop">
+                    <span aria-hidden="true">←</span>
+                </a>
+            @else
+                <button type="button" class="rfm-ecom-preview-close" data-rfm-ecom-preview-close aria-label="Close preview">
+                    <span aria-hidden="true">×</span>
+                </button>
+            @endif
         </header>
 
         <div class="rfm-ecom-preview-scroll">
