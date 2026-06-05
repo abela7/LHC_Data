@@ -40,9 +40,9 @@
                 <nav class="rfm-ecom-preview-breadcrumb" aria-label="Breadcrumb">
                     <span>Home</span>
                     <span aria-hidden="true">›</span>
-                    <span>{{ $ecomPreviewData['category'] ?: 'Shop' }}</span>
+                    <span data-rfm-ecom-preview-breadcrumb-line>{{ $ecomPreviewData['line'] ?: ($ecomPreviewData['category'] ?: 'Shop') }}</span>
                     <span aria-hidden="true">›</span>
-                    <span data-rfm-ecom-preview-breadcrumb>{{ $ecomPreviewData['title'] }}</span>
+                    <span data-rfm-ecom-preview-breadcrumb>{{ $ecomPreviewData['familyTitle'] ?: $ecomPreviewData['title'] }}</span>
                 </nav>
 
                 <div class="rfm-ecom-preview-layout">
