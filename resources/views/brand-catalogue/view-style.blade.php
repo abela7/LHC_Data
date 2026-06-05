@@ -17,7 +17,7 @@
     ])
 
     <div class="sr-hero">
-        <div class="sr-hero-top">
+        <div class="sr-hero-top" style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;flex-wrap:wrap;">
             <div class="sr-hero-title-block">
                 <h1 class="sr-hero-title">{{ $style->name }}</h1>
                 <div class="sr-hero-badges">
@@ -27,6 +27,13 @@
                     <span class="sr-badge">{{ $style->material_name ?: 'Material not set' }}</span>
                 </div>
             </div>
+            <a href="{{ route('brand-catalogue.styles.show', [$catalogue, $brand, $line, $productType, $style]) }}?catalogue=1"
+               class="sr-workspace-btn"
+               title="Open the editable Style Workspace"
+               style="display:inline-flex;align-items:center;gap:.45rem;padding:.62rem 1.05rem;border-radius:10px;background:#1f6f54;color:#fff;font-weight:800;text-decoration:none;white-space:nowrap;min-height:44px;">
+                Open Style Workspace
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M13 6l6 6-6 6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </a>
         </div>
     </div>
 
