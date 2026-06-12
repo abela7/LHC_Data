@@ -118,6 +118,9 @@ class PinkCommerceBridge
                 'code' => (string) $code,
                 'productBarcode' => $product->barcode ? (string) $product->barcode : null,
                 'price' => $product->price ? (float) $product->price->retail_price : 0,
+                // Per-variant POS display name + the variant's own photo (falls back to family on the POS).
+                'name' => $this->productPosName($product),
+                'imageUrl' => $this->productImageUrl($product, $family),
             ];
         }
 
@@ -131,6 +134,42 @@ class PinkCommerceBridge
             'skus' => $skus,
             'images' => $this->collectImageUrls($family),
         ];
+    }
+
+    /**
+     * The variant's POS display name: inventory_name (the "POS name"), then receipt_name,
+     * then the product name. Null when all are blank.
+     */
+    private function productPosName($product): ?string
+    {
+        $name = trim((string) ($product->inventory_name ?: $product->receipt_name ?: $product->name));
+
+        return $name !== '' ? $name : null;
+    }
+
+    /**
+     * The variant's OWN primary photo, uploaded to R2. Null when the product has no
+     * media of its own (the POS then falls back to the family photo).
+     */
+    private function productImageUrl($product, ProductFamily $family): ?string
+    {
+        $disk = (string) config('pinkcommerce.r2_disk', 'r2');
+        foreach ($product->media as $m) {
+            try {
+                $url = $this->ensureUploaded($m, $disk, (int) $family->id);
+                if ($url) {
+                    return $url;
+                }
+            } catch (Throwable $e) {
+                Log::warning('PinkCommerce sku image upload failed', [
+                    'product_id' => $product->id ?? null,
+                    'media_id' => $m->id ?? null,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+
+        return null;
     }
 
     /**
