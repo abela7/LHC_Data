@@ -119,7 +119,7 @@ class PinkCommerceBridge
                 'productBarcode' => $product->barcode ? (string) $product->barcode : null,
                 'price' => $product->price ? (float) $product->price->retail_price : 0,
                 // Per-variant POS display name + the variant's own photo (falls back to family on the POS).
-                'name' => $this->productPosName($product),
+                'name' => $this->productPosName($product, $combination),
                 'imageUrl' => $this->productImageUrl($product, $family),
             ];
         }
@@ -137,14 +137,18 @@ class PinkCommerceBridge
     }
 
     /**
-     * The variant's POS display name: inventory_name (the "POS name"), then receipt_name,
-     * then the product name. Null when all are blank.
+     * The variant's POS display name: accepted inventory name, then product
+     * name, with the variant combination only as a last resort.
      */
-    private function productPosName($product): ?string
+    private function productPosName($product, array $combination): ?string
     {
-        $name = trim((string) ($product->inventory_name ?: $product->receipt_name ?: $product->name));
+        $name = trim((string) ($product->inventory_name ?: $product->name));
 
-        return $name !== '' ? $name : null;
+        if ($name !== '') {
+            return $name;
+        }
+
+        return count($combination) > 0 ? implode(' - ', $combination) : null;
     }
 
     /**
