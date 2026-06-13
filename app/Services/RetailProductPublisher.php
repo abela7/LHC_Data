@@ -301,17 +301,43 @@ class RetailProductPublisher
         $map = [];
 
         foreach ($variants as $variant) {
-            $group = ProductVariantGroup::query()->updateOrCreate(
-                [
+            $group = ProductVariantGroup::query()
+                ->where('product_family_id', $family->id)
+                ->where('name', $variant->name)
+                ->first();
+
+            if (! $group && $scopeKey === null) {
+                $group = ProductVariantGroup::query()
+                    ->where('brand_catalogue_variant_id', $variant->id)
+                    ->first();
+            }
+
+            if (! $group) {
+                $group = new ProductVariantGroup([
                     'product_family_id' => $family->id,
                     'name' => $variant->name,
-                ],
-                [
-                    'brand_catalogue_variant_id' => $scopeKey === null ? $variant->id : null,
-                    'variant_type' => $variant->variant_type,
-                    'sort_order' => (int) $variant->sort_order,
-                ],
-            );
+                ]);
+            }
+
+            $group->fill([
+                'product_family_id' => $family->id,
+                'name' => $variant->name,
+                'variant_type' => $variant->variant_type,
+                'sort_order' => (int) $variant->sort_order,
+            ]);
+
+            if ($scopeKey === null) {
+                $catalogueVariantOwner = ProductVariantGroup::query()
+                    ->where('brand_catalogue_variant_id', $variant->id)
+                    ->first();
+                if (! $catalogueVariantOwner || $catalogueVariantOwner->is($group)) {
+                    $group->brand_catalogue_variant_id = $variant->id;
+                }
+            } else {
+                $group->brand_catalogue_variant_id = null;
+            }
+
+            $group->save();
 
             $map[$variant->id] = $group;
         }
@@ -334,17 +360,43 @@ class RetailProductPublisher
             }
 
             foreach ($variant->options as $option) {
-                $publishedOption = ProductVariantOption::query()->updateOrCreate(
-                    [
+                $publishedOption = ProductVariantOption::query()
+                    ->where('product_variant_group_id', $group->id)
+                    ->where('label', $option->label)
+                    ->first();
+
+                if (! $publishedOption && $scopeKey === null) {
+                    $publishedOption = ProductVariantOption::query()
+                        ->where('brand_catalogue_variant_option_id', $option->id)
+                        ->first();
+                }
+
+                if (! $publishedOption) {
+                    $publishedOption = new ProductVariantOption([
                         'product_variant_group_id' => $group->id,
                         'label' => $option->label,
-                    ],
-                    [
-                        'brand_catalogue_variant_option_id' => $scopeKey === null ? $option->id : null,
-                        'value' => $option->value,
-                        'sort_order' => (int) $option->sort_order,
-                    ],
-                );
+                    ]);
+                }
+
+                $publishedOption->fill([
+                    'product_variant_group_id' => $group->id,
+                    'label' => $option->label,
+                    'value' => $option->value,
+                    'sort_order' => (int) $option->sort_order,
+                ]);
+
+                if ($scopeKey === null) {
+                    $catalogueOptionOwner = ProductVariantOption::query()
+                        ->where('brand_catalogue_variant_option_id', $option->id)
+                        ->first();
+                    if (! $catalogueOptionOwner || $catalogueOptionOwner->is($publishedOption)) {
+                        $publishedOption->brand_catalogue_variant_option_id = $option->id;
+                    }
+                } else {
+                    $publishedOption->brand_catalogue_variant_option_id = null;
+                }
+
+                $publishedOption->save();
 
                 $map[$option->id] = $publishedOption;
             }
