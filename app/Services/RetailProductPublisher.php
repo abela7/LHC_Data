@@ -301,16 +301,13 @@ class RetailProductPublisher
         $map = [];
 
         foreach ($variants as $variant) {
-            $identity = $scopeKey === null
-                ? ['brand_catalogue_variant_id' => $variant->id]
-                : ['product_family_id' => $family->id, 'name' => $variant->name];
-
             $group = ProductVariantGroup::query()->updateOrCreate(
-                $identity,
                 [
                     'product_family_id' => $family->id,
-                    'brand_catalogue_variant_id' => $scopeKey === null ? $variant->id : null,
                     'name' => $variant->name,
+                ],
+                [
+                    'brand_catalogue_variant_id' => $scopeKey === null ? $variant->id : null,
                     'variant_type' => $variant->variant_type,
                     'sort_order' => (int) $variant->sort_order,
                 ],
@@ -337,16 +334,13 @@ class RetailProductPublisher
             }
 
             foreach ($variant->options as $option) {
-                $identity = $scopeKey === null
-                    ? ['brand_catalogue_variant_option_id' => $option->id]
-                    : ['product_variant_group_id' => $group->id, 'label' => $option->label];
-
                 $publishedOption = ProductVariantOption::query()->updateOrCreate(
-                    $identity,
                     [
                         'product_variant_group_id' => $group->id,
-                        'brand_catalogue_variant_option_id' => $scopeKey === null ? $option->id : null,
                         'label' => $option->label,
+                    ],
+                    [
+                        'brand_catalogue_variant_option_id' => $scopeKey === null ? $option->id : null,
                         'value' => $option->value,
                         'sort_order' => (int) $option->sort_order,
                     ],
