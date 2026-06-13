@@ -53,6 +53,7 @@ final class RetailEcommercePreview
     {
         $family->loadMissing([
             'catalogueLine',
+            'catalogueStyle',
             'ecommerceProfile',
             'media',
             'variantGroups.options',
@@ -169,6 +170,10 @@ final class RetailEcommercePreview
         return [
             'familyId' => (int) $family->id,
             'familyManageUrl' => route('retail-products.families.show', $family),
+            'publishActionUrl' => $family->catalogueStyle
+                ? route('brand-catalogue.styles.publish-products', $family->catalogueStyle)
+                : null,
+            'publishActionLabel' => (bool) ($familyOnline?->is_published ?? false) ? 'Republish' : 'Publish',
             'shopProductUrl' => route('shop.show', $family),
             'lineUrl' => $lineBreadcrumb['lineUrl'],
             'lineShopUrl' => $lineBreadcrumb['lineShopUrl'],

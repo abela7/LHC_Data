@@ -9977,6 +9977,25 @@
         @apply flex shrink-0 items-center gap-2;
     }
 
+    .rfm-ecom-preview-publish-form {
+        @apply m-0;
+    }
+
+    .rfm-ecom-preview-publish-btn {
+        @apply flex h-10 shrink-0 items-center justify-center rounded-full border px-4 text-xs font-bold uppercase tracking-[0.08em] cursor-pointer;
+        border-color: var(--color-accent);
+        background: var(--color-accent);
+        color: #fffdf8;
+        box-shadow: 0 10px 24px rgba(25, 98, 86, 0.18);
+    }
+
+    .rfm-ecom-preview-publish-btn:hover,
+    .rfm-ecom-preview-publish-btn:focus-visible {
+        background: #175b50;
+        border-color: #175b50;
+        outline: none;
+    }
+
     .rfm-ecom-preview-family-btn {
         @apply flex h-10 w-10 shrink-0 items-center justify-center rounded-full border;
         border-color: var(--color-accent);

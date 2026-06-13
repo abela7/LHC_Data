@@ -14,6 +14,19 @@
             </div>
             @if ($asPage)
                 <div class="rfm-ecom-preview-toolbar-actions">
+                    @if (! empty($ecomPreviewData['publishActionUrl']))
+                        <form method="POST"
+                              action="{{ $ecomPreviewData['publishActionUrl'] }}"
+                              class="rfm-ecom-preview-publish-form">
+                            @csrf
+                            <button type="submit"
+                                    class="rfm-ecom-preview-publish-btn"
+                                    aria-label="{{ ($ecomPreviewData['publishActionLabel'] ?? 'Publish') }} latest product updates"
+                                    title="{{ ($ecomPreviewData['publishActionLabel'] ?? 'Publish') }} latest product updates">
+                                {{ $ecomPreviewData['publishActionLabel'] ?? 'Publish' }}
+                            </button>
+                        </form>
+                    @endif
                     @if (! empty($ecomPreviewData['familyManageUrl']))
                         <a href="{{ $ecomPreviewData['familyManageUrl'] }}"
                            class="rfm-ecom-preview-family-btn"
